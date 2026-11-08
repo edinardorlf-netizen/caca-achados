@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Caça Achados</title>
+<meta name="description" content="Promoções de afiliado prontas para postar · O Cara dos Achados">
+<meta name="theme-color" content="#16140F">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icone.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icone-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..900&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="estilo.css?v=1">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)} body{margin:0} img{max-width:100%} [hidden]{display:none!important}</style>
+</head>
+<body>
+<div class="login" id="v-login" hidden>
+  <form class="card" id="f-login" novalidate>
+    <div class="marca"><div class="selo" aria-hidden="true"><span>O CARA<br>DOS<br>ACHADOS</span></div><div><h1>Caça Achados</h1><p>um sistema Auraxis</p></div></div>
+    <p class="hint">Entre com o mesmo e-mail e senha do LicitaPro.</p>
+    <label class="f" for="l-email">E-mail<input class="in" id="l-email" type="email" autocomplete="email" required></label>
+    <label class="f" for="l-senha">Senha<input class="in" id="l-senha" type="password" autocomplete="current-password" required></label>
+    <p class="erro" id="l-erro"></p>
+    <button class="btn amarelo" id="l-btn" type="submit">Entrar</button>
+  </form>
+</div>
+
+<div class="wrap" id="v-app" hidden>
+  <header class="top">
+    <div class="marca">
+      <div class="selo" aria-hidden="true"><span>O CARA<br>DOS<br>ACHADOS</span></div>
+      <div><h1>Caça Achados</h1><p>Promoções de Shopee, Mercado Livre, Amazon e TikTok Shop prontas para postar</p></div>
+    </div>
+    <div class="row"><button class="btn amarelo" id="btn-nova" type="button">+ Nova oferta</button><button class="btn ghost sm" id="btn-sair" type="button">Sair</button></div>
+  </header>
+
+  <nav class="abas" role="tablist" aria-label="Seções">
+    <button role="tab" id="tab-cacar" aria-selected="false" data-v="cacar">Caçar</button>
+    <button role="tab" id="tab-fila" aria-selected="true" data-v="fila">Fila de ofertas <span class="n" id="n-fila">0</span></button>
+    <button role="tab" id="tab-postadas" aria-selected="false" data-v="postadas">Postadas</button>
+    <button role="tab" id="tab-ajustes" aria-selected="false" data-v="ajustes">Mercado Livre</button>
+  </nav>
+
+  <!-- CAÇAR -->
+  <section id="v-cacar" hidden>
+    <div class="card">
+      <h2>Colar oferta</h2>
+      <p class="hint">No app do marketplace, toque em Compartilhar (ou gere o link de afiliado no portal) e cole aqui o texto ou o link. Preenchemos nome, preços, desconto e loja sozinhos; você confere e salva na fila.</p>
+      <label class="f" for="colar">Texto ou link compartilhado
+        <textarea class="in" id="colar" placeholder="Ex.: Fone Bluetooth XYZ de R$ 199,90 por R$ 89,90 https://s.shopee.com.br/abc123"></textarea>
+      </label>
+      <div class="row"><button class="btn" id="btn-ler" type="button">Ler oferta</button><span class="hint" id="colar-msg"></span></div>
+    </div>
+    <h2 style="font-size:16px;margin:18px 0 10px">Onde caçar promoções</h2>
+    <div class="grid-cacar" id="mkts"></div>
+  </section>
+
+  <!-- FILA -->
+  <section id="v-fila">
+    <div class="layout">
+      <div class="card">
+        <div class="row" style="justify-content:space-between"><h2>Fila de ofertas</h2>
+          <select class="in" id="ordem" style="width:auto" aria-label="Ordenar">
+            <option value="score">Melhores primeiro</option><option value="novas">Mais novas</option><option value="desconto">Maior desconto</option><option value="validade">Acabando antes</option>
+          </select></div>
+        <div class="filtros" id="filtro-mkt"></div>
+        <div class="lista" id="lista"><div class="vazio">Carregando as ofertas…</div></div>
+      </div>
+      <div class="card gerador" id="gerador">
+        <h2>Post pronto</h2>
+        <div id="ger-vazio" class="vazio">Escolha uma oferta na fila para gerar o post de WhatsApp, Telegram, TikTok/Instagram ou o roteiro da live.</div>
+        <div id="ger" hidden>
+          <div class="o-tit" id="ger-tit" style="font-size:15px"></div>
+          <div class="falta-link" id="falta-link" hidden>
+            <span><b>Falta o seu link de afiliado.</b> Abra o produto logado na sua conta de afiliado do Mercado Livre, toque em <b>Compartilhar</b> e cole o link aqui.</span>
+            <div class="row"><a class="btn ghost sm" id="fl-abrir" target="_blank" rel="noopener">Abrir produto</a><a class="btn ghost sm" href="https://www.mercadolivre.com.br/l/afiliados-gerar-link" target="_blank" rel="noopener">Gerador de links</a></div>
+            <div class="row" style="flex-wrap:nowrap"><input class="in" id="fl-link" inputmode="url" placeholder="Cole o link de afiliado (meli.la/… ou mercadolivre.com/sec/…)"><button class="btn sm" id="fl-salvar" type="button">Salvar</button></div>
+          </div>
+          <div class="canais" role="tablist" aria-label="Canal" id="canais">
+            <button role="tab" data-c="whatsapp" aria-selected="true">WhatsApp</button>
+            <button role="tab" data-c="telegram" aria-selected="false">Telegram</button>
+            <button role="tab" data-c="social" aria-selected="false">TikTok / Insta</button>
+            <button role="tab" data-c="live" aria-selected="false">Roteiro de live</button>
+          </div>
+          <label class="f" for="post">Texto (pode editar antes de copiar)<textarea class="in post" id="post"></textarea></label>
+          <label class="row" style="font-size:13px;gap:6px"><input type="checkbox" id="aviso-afiliado" checked> Incluir aviso de link de afiliado</label>
+          <div class="row">
+            <button class="btn" id="btn-copiar" type="button">Copiar texto</button>
+            <a class="btn ghost" id="btn-wa" target="_blank" rel="noopener">Abrir no WhatsApp</a>
+            <a class="btn ghost" id="btn-tg" target="_blank" rel="noopener">Abrir no Telegram</a>
+          </div>
+          <div class="row" style="border-top:1px solid var(--line);padding-top:12px">
+            <button class="btn amarelo sm" id="btn-postada" type="button">Marcar como postada</button>
+            <button class="btn ghost sm" id="btn-editar" type="button">Editar</button>
+            <button class="btn ghost sm" id="btn-descartar" type="button">Descartar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MERCADO LIVRE -->
+  <section id="v-ajustes" hidden>
+    <div class="layout">
+      <div class="card">
+        <h2>Mercado Livre</h2>
+        <div class="status-ml" id="ml-status"><span class="ponto"></span> Carregando…</div>
+        <p class="hint" id="ml-sinc"></p>
+        <div class="row" id="ml-acoes"></div>
+        <div id="ml-app">
+          <ol class="passos">
+            <li>Em <a href="https://developers.mercadolivre.com.br/devcenter" target="_blank" rel="noopener">developers.mercadolivre.com.br/devcenter</a>, crie uma aplicação (só leitura + acesso offline, PKCE desligado).</li>
+            <li>Em <b>URI de redirect</b> use: <code id="ml-redirect">https://ginvqrnyvtpmorgvtcun.supabase.co/functions/v1/achados-ml</code></li>
+            <li>Cole abaixo o App ID e a Secret Key. A chave fica no cofre do banco; ninguém consegue ler de volta.</li>
+          </ol>
+          <form id="f-mlapp" class="fgrid" style="margin-top:10px" novalidate>
+            <label class="f" for="ml-id">App ID<input class="in" id="ml-id" inputmode="numeric" autocomplete="off"></label>
+            <label class="f" for="ml-sec">Secret Key<input class="in" id="ml-sec" type="password" autocomplete="off" placeholder="Deixe em branco para manter"></label>
+            <div class="f" style="justify-content:flex-end"><button class="btn" type="submit" id="ml-salvar">Salvar</button></div>
+          </form>
+          <p class="hint" id="ml-msg"></p>
+        </div>
+      </div>
+      <div class="card">
+        <h2>O que buscar</h2>
+        <p class="hint">A cada 3 horas o Caça Achados confere os mais vendidos das categorias escolhidas e coloca na fila os que estão com desconto igual ou maior que o mínimo.</p>
+        <label class="f" for="ml-min" style="max-width:220px">Desconto mínimo (%)<input class="in" id="ml-min" type="number" min="0" max="90" step="5"></label>
+        <div class="f">Categorias<div class="cats" id="ml-cats"><span class="hint">Conecte o Mercado Livre para escolher as categorias.</span></div></div>
+        <div class="row"><button class="btn amarelo" id="ml-salvar-busca" type="button">Salvar escolhas</button><button class="btn ghost" id="ml-buscar" type="button">Buscar agora</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- POSTADAS -->
+  <section id="v-postadas" hidden>
+    <div class="stats" id="stats"></div>
+    <div class="card" style="margin-top:14px">
+      <h2>Histórico de postagens</h2>
+      <div class="tabela"><table><thead><tr><th>Quando</th><th>Oferta</th><th>Loja</th><th>Canais</th><th class="n">Preço</th><th class="n">Desconto</th></tr></thead><tbody id="hist"></tbody></table></div>
+    </div>
+  </section>
+</div>
+
+<!-- EDITOR -->
+<dialog id="editor" style="border:0;border-radius:14px;padding:0;max-width:640px;width:calc(100% - 32px);background:var(--surface);color:var(--ink)">
+  <form id="form" class="card" style="border:0" novalidate>
+    <div class="row" style="justify-content:space-between"><h2 id="ed-tit">Nova oferta</h2><button class="btn ghost sm" type="button" id="ed-fechar">Fechar</button></div>
+    <div class="fgrid">
+      <label class="f w2" for="f-titulo">Produto<input class="in" id="f-titulo" required></label>
+      <label class="f" for="f-mkt">Loja<select class="in" id="f-mkt"></select></label>
+      <label class="f" for="f-cat">Categoria<input class="in" id="f-cat" placeholder="Casa, Eletrônicos…"></label>
+      <label class="f w2" for="f-link">Link de afiliado<input class="in" id="f-link" inputmode="url" placeholder="https://…"></label>
+      <label class="f" for="f-de">Preço de (R$)<input class="in" id="f-de" inputmode="decimal" placeholder="199,90"></label>
+      <label class="f" for="f-por">Preço por (R$)<input class="in" id="f-por" inputmode="decimal" placeholder="89,90"></label>
+      <label class="f" for="f-cupom">Cupom<input class="in" id="f-cupom" placeholder="Opcional"></label>
+      <label class="f" for="f-com">Comissão (%)<input class="in" id="f-com" inputmode="decimal" placeholder="Ex.: 8"></label>
+      <label class="f" for="f-val">Válida até<input class="in" type="date" id="f-val"></label>
+      <label class="f w2" for="f-img">Imagem (endereço da foto)<input class="in" id="f-img" inputmode="url" placeholder="Opcional"></label>
+      <label class="f w2" for="f-nota">Observação (vai no post)<input class="in" id="f-nota" placeholder="Ex.: frete grátis, só hoje"></label>
+    </div>
+    <p class="hint" id="ed-calc"></p>
+    <div class="row"><button class="btn amarelo" type="submit" id="ed-salvar">Salvar na fila</button><span class="hint" id="ed-msg"></span></div>
+  </form>
+</dialog>
+<div class="toast" id="toast" hidden></div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<script src="config.js?v=1"></script>
+<script src="app.js?v=1"></script>
+</body>
+</html>
