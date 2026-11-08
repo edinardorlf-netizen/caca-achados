@@ -172,6 +172,36 @@
         <p class="hint" id="tg-msg"></p>
       </div>
     </div>
+    <div class="layout" style="margin-top:14px">
+      <div class="card">
+        <h2>Shopee</h2>
+        <div class="status-ml" id="shp-status"><span class="ponto"></span> Carregando…</div>
+        <p class="hint" id="shp-sinc"></p>
+        <ol class="passos">
+          <li>Peça acesso à Open API pelo <a href="https://help.shopee.com.br/portal/webform/bbce78695c364ba18c9cbceb74ec9091" target="_blank" rel="noopener">formulário de afiliados</a> (Cadastro/conta › Quero ativar a API).</li>
+          <li>Quando liberar, copie o <b>AppID</b> e a <b>Senha</b> em <a href="https://affiliate.shopee.com.br/open_api" target="_blank" rel="noopener">affiliate.shopee.com.br/open_api</a> e cole abaixo. A senha fica no cofre do banco.</li>
+          <li>Cada oferta da Shopee já chega com o <b>seu link de afiliado</b> e a % de comissão.</li>
+        </ol>
+        <form id="f-shp" class="fgrid" style="margin-top:10px" novalidate>
+          <label class="f" for="shp-id">AppID<input class="in" id="shp-id" inputmode="numeric" autocomplete="off"></label>
+          <label class="f" for="shp-sec">Senha (Secret)<input class="in" id="shp-sec" type="password" autocomplete="off" placeholder="Deixe em branco para manter"></label>
+          <div class="f" style="justify-content:flex-end"><button class="btn" type="submit" id="shp-salvar">Salvar e testar</button></div>
+        </form>
+        <p class="hint" id="shp-msg"></p>
+      </div>
+      <div class="card">
+        <h2>O que buscar na Shopee</h2>
+        <p class="hint">A cada 3 horas o Caça Achados confere os mais vendidos da Shopee e as palavras abaixo, e coloca na fila o que tem desconto e comissão acima do mínimo.</p>
+        <label class="f" for="shp-palavras">Palavras de busca (uma por linha)<textarea class="in" id="shp-palavras" rows="5" placeholder="fone bluetooth&#10;air fryer"></textarea></label>
+        <div class="fgrid">
+          <label class="f" for="shp-min">Desconto mínimo (%)<input class="in" id="shp-min" type="number" min="0" max="95" step="5"></label>
+          <label class="f" for="shp-com">Comissão mínima (%)<input class="in" id="shp-com" type="number" min="0" max="100" step="1"></label>
+        </div>
+        <label class="row" style="font-size:14px;gap:6px;margin-top:8px"><input type="checkbox" id="shp-top"> Incluir os mais vendidos da Shopee</label>
+        <label class="row" style="font-size:14px;gap:6px"><input type="checkbox" id="shp-ativo"> Busca automática ligada</label>
+        <div class="row"><button class="btn amarelo" id="shp-salvar-busca" type="button">Salvar escolhas</button><button class="btn ghost" id="shp-buscar" type="button">Buscar agora</button></div>
+      </div>
+    </div>
   </section>
 
   <!-- POSTADAS -->
@@ -210,6 +240,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=2"></script>
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

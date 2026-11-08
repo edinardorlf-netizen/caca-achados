@@ -2,7 +2,7 @@
    Fila de promoções de afiliado com posts prontos. Dados no Supabase (só o dono vê). */
 const CFG = window.ACHADOS_CONFIG;
 const sb = supabase.createClient(CFG.url, CFG.key, { auth: { persistSession: true } });
-const FN = `${CFG.url}/functions/v1/achados-ml`;
+const FN = `${CFG.url}/functions/v1/achados-ml`, FN_SHP = `${CFG.url}/functions/v1/achados-shopee`;
 
 const MKT = {
   shopee:{nome:"Shopee",cor:"var(--shopee)",
@@ -265,17 +265,17 @@ $("#btn-descartar").onclick = () => setStatus("descartada");
 $("#btn-editar").onclick = () => { const o=ofertas.find(x=>x.id===selId); if(o) abrirEditor(o, o.id); };
 
 // ---------- Mercado Livre ----------
-async function chamarML(acao, extra={}){
+async function chamarML(acao, extra={}, url=FN){
   const { data:{ session } } = await sb.auth.getSession();
-  const r = await fetch(FN, { method:"POST", headers:{ "Content-Type":"application/json", Authorization:`Bearer ${session?.access_token||""}`, apikey: CFG.key }, body: JSON.stringify({ acao, ...extra }) });
+  const r = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json", Authorization:`Bearer ${session?.access_token||""}`, apikey: CFG.key }, body: JSON.stringify({ acao, ...extra }) });
   const j = await r.json().catch(()=>({}));
   if(!r.ok || j.erro) throw new Error(j.erro || `Erro ${r.status}`);
   return j;
 }
 async function carregarML(){
-  const [st, cf, ts] = await Promise.all([ sb.rpc("achados_ml_status"),
-    sb.from("achados_config").select("ml_client_id,ml_categorias,ml_categorias_nomes,desconto_min,ml_afiliado_query,ml_afiliado_em,tg_ativo,tg_intervalo_min,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post,tg_msg").maybeSingle(),
-    sb.rpc("achados_tg_status") ]);
+  const [st, cf, ts, ss] = await Promise.all([ sb.rpc("achados_ml_status"),
+    sb.from("achados_config").select("ml_client_id,ml_categorias,ml_categorias_nomes,desconto_min,ml_afiliado_query,ml_afiliado_em,tg_ativo,tg_intervalo_min,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post,tg_msg,shp_app_id,shp_ativo,shp_palavras,shp_top,shp_desconto_min,shp_comissao_min,shp_sinc_em,shp_sinc_ok,shp_sinc_msg").maybeSingle(),
+    sb.rpc("achados_tg_status"), sb.rpc("achados_shp_status") ]);
   const s = (st.data||[])[0] || {};
   cfgML = cf.data || { ml_categorias:[], ml_categorias_nomes:{}, desconto_min:20 };
   $("#ml-status").innerHTML = s.conectado ? `<span class="ponto on"></span> Conectado${s.nickname?` como <b>${esc(s.nickname)}</b>`:""}`
@@ -287,7 +287,16 @@ async function carregarML(){
   $("#ml-min").value = cfgML.desconto_min ?? 20;
   if(s.conectado && !catsML){ try{ catsML = (await chamarML("categorias")).categorias || []; }catch(e){ $("#ml-cats").innerHTML = `<span class="erro">${esc(errMsg(e))}</span>`; } }
   renderCats(s.conectado);
-  renderAfiliado(); renderTelegram((ts.data||[])[0] || {});
+  renderAfiliado(); renderTelegram((ts.data||[])[0] || {}); renderShopee((ss.data||[])[0] || {});
+}
+function renderShopee(t){
+  const pronto = !!(t.tem_app && t.tem_secret);
+  $("#shp-status").innerHTML = pronto ? `<span class="ponto ${cfgML.shp_sinc_ok===false?"":"on"}"></span> AppID salvo${cfgML.shp_ativo?" · busca automática <b>ligada</b>":" · busca automática desligada"}` : `<span class="ponto"></span> Aguardando a Shopee liberar a Open API.`;
+  $("#shp-sinc").textContent = cfgML.shp_sinc_em ? `Última busca: ${new Date(cfgML.shp_sinc_em).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})} · ${cfgML.shp_sinc_msg||""}` : (cfgML.shp_sinc_msg||"");
+  $("#shp-id").value = cfgML.shp_app_id || "";
+  $("#shp-palavras").value = (cfgML.shp_palavras||[]).join("\n");
+  $("#shp-min").value = cfgML.shp_desconto_min ?? 30; $("#shp-com").value = cfgML.shp_comissao_min ?? 0;
+  $("#shp-top").checked = cfgML.shp_top !== false; $("#shp-ativo").checked = cfgML.shp_ativo !== false;
 }
 function renderAfiliado(){
   const q = cfgML.ml_afiliado_query;
@@ -327,6 +336,33 @@ $("#f-tg").addEventListener("submit", async (e)=>{
   catch(err){ $("#tg-msg").textContent = errMsg(err); }
   $("#tg-salvar").disabled=false; await carregarML();
 });
+$("#f-shp").addEventListener("submit", async (e)=>{
+  e.preventDefault();
+  const id = $("#shp-id").value.trim(), sec = $("#shp-sec").value.trim();
+  if(!/^\d{4,20}$/.test(id)){ $("#shp-msg").textContent="O AppID da Shopee é só números."; return; }
+  $("#shp-salvar").disabled=true; $("#shp-msg").textContent="Salvando…";
+  const { error } = await sb.rpc("achados_salvar_shopee", { p_app_id: id, p_secret: sec || null });
+  if(error){ $("#shp-msg").textContent = error.message; $("#shp-salvar").disabled=false; return; }
+  $("#shp-sec").value="";
+  try{ const r = await chamarML("testar", {}, FN_SHP); $("#shp-msg").textContent = "Shopee conectada!" + (r.exemplo ? ` Exemplo: ${r.exemplo.titulo}` : ""); }
+  catch(err){ $("#shp-msg").textContent = errMsg(err); }
+  $("#shp-salvar").disabled=false; carregarML();
+});
+$("#shp-salvar-busca").onclick = async () => {
+  const lim = (v,a,b,d) => { const n = Number(v); return isFinite(n) && v!=="" ? Math.max(a, Math.min(b, n)) : d; };
+  const palavras = [...new Set($("#shp-palavras").value.split(/\n|,/).map(x=>x.trim()).filter(Boolean))].slice(0,12);
+  const patch = { shp_palavras: palavras, shp_desconto_min: Math.round(lim($("#shp-min").value,0,95,30)), shp_comissao_min: lim($("#shp-com").value,0,100,0), shp_top: $("#shp-top").checked, shp_ativo: $("#shp-ativo").checked };
+  const { data:{ user } } = await sb.auth.getUser();
+  const { error } = await sb.from("achados_config").update(patch).eq("dono", (user?.email||"").toLowerCase());
+  if(error) return toast("Não consegui salvar: "+error.message);
+  toast(`Salvo: ${palavras.length} palavra(s), desconto mínimo ${patch.shp_desconto_min}%`); carregarML();
+};
+$("#shp-buscar").onclick = async () => {
+  const b=$("#shp-buscar"); b.disabled=true; b.textContent="Buscando… (até 2 min)";
+  try{ const r = await chamarML("buscar", {}, FN_SHP); toast(r.msg || "Busca concluída"); await carregarOfertas(); }
+  catch(err){ toast(errMsg(err)); }
+  b.disabled=false; b.textContent="Buscar agora"; carregarML();
+};
 $("#tg-salvar-agenda").onclick = async () => {
   const lim = (v,a,b,d) => { const n = Number(v); return isFinite(n) && v!=="" ? Math.max(a, Math.min(b, Math.round(n))) : d; };
   const patch = { tg_intervalo_min: lim($("#tg-int").value,10,1440,60), tg_hora_ini: lim($("#tg-ini").value,0,23,8), tg_hora_fim: lim($("#tg-fim").value,1,24,22),
