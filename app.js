@@ -19,7 +19,7 @@ const MKT = {
     dica:"No app: Perfil › Central de criadores › Afiliados › Mercado de produtos. Adicione à sua vitrine e use nas lives e vídeos (carrinho laranja)."},
   outro:{nome:"Outra loja",cor:"var(--outro)",links:[],dica:""},
 };
-let ofertas = [], selId = null, canal = "whatsapp", filtroMkt = "todas", editId = null, canalRT = null, cfgML = null, catsML = null, tgPronto = false;
+let ofertas = [], selId = null, canal = "whatsapp", filtroMkt = "todas", editId = null, canalRT = null, cfgML = null, catsML = null, tgPronto = false, amzTag = null;
 const $ = (s) => document.querySelector(s);
 const brl = (v) => v == null || isNaN(v) ? "" : Number(v).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const num = (s) => { if (s == null || s === "") return null; const t = String(s).replace(/[^\d,.-]/g,""); const v = t.includes(",") ? Number(t.replace(/\./g,"").replace(",",".")) : Number(t); return isFinite(v) ? v : null; };
@@ -36,6 +36,17 @@ function mktDe(url){ const u=(url||"").toLowerCase();
   if(/amazon|amzn\./.test(u)) return "amazon";
   if(/tiktok/.test(u)) return "tiktok";
   return "outro"; }
+// Amazon: coloca a tag de associado e limpa o link (amazon.com.br/dp/ASIN?tag=…). Links amzn.to já vêm com a tag.
+function afiliar(url){
+  if(!url || !amzTag || mktDe(url)!=="amazon") return url;
+  try{
+    const u = new URL(url);
+    if(!/(^|\.)amazon\.com\.br$/i.test(u.hostname)) return url;
+    const asin = (u.pathname.match(/\/(?:dp|gp\/product|gp\/aw\/d|product)\/([A-Z0-9]{10})/i)||[])[1];
+    if(asin) return `https://www.amazon.com.br/dp/${asin.toUpperCase()}?tag=${encodeURIComponent(amzTag)}`;
+    u.searchParams.set("tag", amzTag); return u.toString();
+  }catch{ return url; }
+}
 const errMsg = (e) => (e && (e.message || e.error_description || e.erro)) || String(e);
 
 // Banco ↔ tela
@@ -57,7 +68,7 @@ function lerTexto(txt){
   titulo = titulo.replace(/R\$\s*[\d.,]+/g,"").replace(/[-–|:]+\s*$/,"").replace(/\b(confira|olha|veja|achei|compre|aproveite)\b[:!]?/gi,"").replace(/\b(de|por)\s*$/i,"").replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu,"").replace(/\s{2,}/g," ").trim().slice(0,140);
   let de=null, por=null;
   if(precos.length>=2){ de=Math.max(...precos); por=Math.min(...precos); } else if(precos.length===1){ por=precos[0]; if(pct) de=Math.round(por/(1-pct/100)*100)/100; }
-  return {titulo, link:url, marketplace:mktDe(url), precoDe:de, precoPor:por, cupom};
+  return {titulo, link:afiliar(url), marketplace:mktDe(url), precoDe:de, precoPor:por, cupom};
 }
 
 // ---------- Posts ----------
@@ -194,7 +205,7 @@ function abrirEditor(o={}, id=null){
   const d=$("#editor"); if(d.showModal) d.showModal(); else d.setAttribute("open","");
 }
 function lerForm(){ return {
-  titulo:$("#f-titulo").value.trim(), marketplace:$("#f-mkt").value, categoria:$("#f-cat").value.trim(), link:$("#f-link").value.trim(),
+  titulo:$("#f-titulo").value.trim(), marketplace:$("#f-mkt").value, categoria:$("#f-cat").value.trim(), link:afiliar($("#f-link").value.trim()),
   precoDe:num($("#f-de").value), precoPor:num($("#f-por").value), cupom:$("#f-cupom").value.trim().toUpperCase(), comissao:num($("#f-com").value),
   validade:$("#f-val").value||null, imagem:$("#f-img").value.trim(), nota:$("#f-nota").value.trim() }; }
 function calc(){ const o=lerForm(); const d=desc(o); $("#ed-calc").textContent = o.precoPor ? `${d?`${d}% de desconto · `:""}nota ${score(o)}` : ""; }
@@ -238,7 +249,7 @@ $("#btn-copiar").onclick = async () => {
 $("#fl-salvar").onclick = async () => {
   const v = $("#fl-link").value.trim();
   if(!/^https?:\/\//i.test(v)){ toast("Cole o link completo, começando com https://"); return; }
-  try{ await salvarOferta(selId, { link: v, link_auto: false }); $("#fl-link").value=""; toast("Link de afiliado salvo"); }catch(err){ toast("Não consegui salvar: "+errMsg(err)); }
+  try{ await salvarOferta(selId, { link: afiliar(v), link_auto: false }); $("#fl-link").value=""; toast("Link de afiliado salvo"); }catch(err){ toast("Não consegui salvar: "+errMsg(err)); }
 };
 async function setStatus(status){
   const o = ofertas.find(x=>x.id===selId); if(!o) return;
@@ -274,7 +285,7 @@ async function chamarML(acao, extra={}, url=FN){
 }
 async function carregarML(){
   const [st, cf, ts, ss] = await Promise.all([ sb.rpc("achados_ml_status"),
-    sb.from("achados_config").select("ml_client_id,ml_categorias,ml_categorias_nomes,desconto_min,ml_afiliado_query,ml_afiliado_em,tg_ativo,tg_intervalo_min,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post,tg_msg,shp_app_id,shp_ativo,shp_palavras,shp_top,shp_desconto_min,shp_comissao_min,shp_sinc_em,shp_sinc_ok,shp_sinc_msg").maybeSingle(),
+    sb.from("achados_config").select("ml_client_id,ml_categorias,ml_categorias_nomes,desconto_min,ml_afiliado_query,ml_afiliado_em,tg_ativo,tg_intervalo_min,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post,tg_msg,shp_app_id,shp_ativo,shp_palavras,shp_top,shp_desconto_min,shp_comissao_min,shp_sinc_em,shp_sinc_ok,shp_sinc_msg,amz_tag").maybeSingle(),
     sb.rpc("achados_tg_status"), sb.rpc("achados_shp_status") ]);
   const s = (st.data||[])[0] || {};
   cfgML = cf.data || { ml_categorias:[], ml_categorias_nomes:{}, desconto_min:20 };
@@ -288,6 +299,8 @@ async function carregarML(){
   if(s.conectado && !catsML){ try{ catsML = (await chamarML("categorias")).categorias || []; }catch(e){ $("#ml-cats").innerHTML = `<span class="erro">${esc(errMsg(e))}</span>`; } }
   renderCats(s.conectado);
   renderAfiliado(); renderTelegram((ts.data||[])[0] || {}); renderShopee((ss.data||[])[0] || {});
+  amzTag = cfgML.amz_tag || null; $("#amz-tag").value = amzTag || "";
+  $("#amz-status").innerHTML = amzTag ? `<span class="ponto on"></span> Tag <b>${esc(amzTag)}</b> ativa nos links da Amazon.` : `<span class="ponto"></span> Sem tag: os links da Amazon ficam como você colar.`;
 }
 function renderShopee(t){
   const pronto = !!(t.tem_app && t.tem_secret);
@@ -362,6 +375,14 @@ $("#shp-buscar").onclick = async () => {
   try{ const r = await chamarML("buscar", {}, FN_SHP); toast(r.msg || "Busca concluída"); await carregarOfertas(); }
   catch(err){ toast(errMsg(err)); }
   b.disabled=false; b.textContent="Buscar agora"; carregarML();
+};
+$("#amz-salvar").onclick = async () => {
+  const t = $("#amz-tag").value.trim();
+  if(t && !/^[A-Za-z0-9_-]{3,40}-2\d$/.test(t)) return toast("A tag da Amazon termina em -20 (ex.: ocaradosachados-20).");
+  const { data:{ user } } = await sb.auth.getUser();
+  const { error } = await sb.from("achados_config").update({ amz_tag: t || null }).eq("dono", (user?.email||"").toLowerCase());
+  if(error) return toast("Não consegui salvar: "+error.message);
+  toast(t ? "Tag da Amazon salva" : "Tag removida"); carregarML();
 };
 $("#tg-salvar-agenda").onclick = async () => {
   const lim = (v,a,b,d) => { const n = Number(v); return isFinite(n) && v!=="" ? Math.max(a, Math.min(b, Math.round(n))) : d; };
@@ -470,6 +491,7 @@ async function entrar(session){
     history.replaceState(null, "", location.pathname);
   }
   mostrar(aba);
+  try{ const { data } = await sb.from("achados_config").select("amz_tag").maybeSingle(); amzTag = data?.amz_tag || null; }catch{}
   await carregarOfertas(); ouvir();
 }
 let ultimoUsuario = undefined;

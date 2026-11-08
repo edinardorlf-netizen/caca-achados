@@ -202,6 +202,23 @@
         <div class="row"><button class="btn amarelo" id="shp-salvar-busca" type="button">Salvar escolhas</button><button class="btn ghost" id="shp-buscar" type="button">Buscar agora</button></div>
       </div>
     </div>
+    <div class="layout" style="margin-top:14px">
+      <div class="card">
+        <h2>Amazon</h2>
+        <p class="hint" id="amz-status"></p>
+        <ol class="passos">
+          <li>No <a href="https://associados.amazon.com.br/" target="_blank" rel="noopener">Associados Amazon</a>, copie a sua <b>tag</b> (ID de rastreamento, termina em <code>-20</code>).</li>
+          <li>Salve abaixo. Todo link da Amazon que você colar no Caça Achados ganha a sua tag sozinho, já limpo (<code>amazon.com.br/dp/…?tag=…</code>).</li>
+          <li>A busca automática de ofertas da Amazon depende da API de criadores, que a Amazon só libera depois de vendas qualificadas. Quando liberar, ligamos aqui.</li>
+        </ol>
+        <div class="row" style="flex-wrap:nowrap;margin-top:10px"><input class="in" id="amz-tag" autocomplete="off" placeholder="seunome-20"><button class="btn" id="amz-salvar" type="button">Salvar tag</button></div>
+        <div class="row"><a class="btn ghost sm" href="https://www.amazon.com.br/deals" target="_blank" rel="noopener">Ofertas do dia</a><a class="btn ghost sm" href="https://www.amazon.com.br/gp/bestsellers" target="_blank" rel="noopener">Mais vendidos</a></div>
+      </div>
+      <div class="card">
+        <h2>TikTok Shop</h2>
+        <p class="hint">O TikTok não tem API de afiliados para criadores no Brasil, então aqui é manual: no app do TikTok, vá em <b>Perfil › Central de criadores › Afiliados › Mercado de produtos</b>, adicione à vitrine e use nas lives e vídeos. Para lembrar de um produto, cole o link na aba <b>Caçar</b>: ele entra na fila com o roteiro de live pronto.</p>
+      </div>
+    </div>
   </section>
 
   <!-- POSTADAS -->
@@ -240,6 +257,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=2"></script>
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>
