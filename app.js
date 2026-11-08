@@ -320,12 +320,30 @@ function mostrar(v){
 document.querySelector("nav.abas").addEventListener("click",(e)=>{ const b=e.target.closest("button[data-v]"); if(b) mostrar(b.dataset.v); });
 
 // ---------- Login ----------
+let modoLogin = "entrar";
+$("#l-modo").onclick = () => {
+  modoLogin = modoLogin === "entrar" ? "criar" : "entrar";
+  $("#l-btn").textContent = modoLogin === "entrar" ? "Entrar" : "Criar conta";
+  $("#l-modo").textContent = modoLogin === "entrar" ? "Primeiro acesso? Criar conta" : "Já tenho conta: entrar";
+  $("#l-dica").textContent = modoLogin === "entrar" ? "Entre com seu e-mail e senha do Caça Achados." : "Crie sua senha (mínimo 8 caracteres). Depois confirme pelo link que chega no seu e-mail.";
+  $("#l-senha").autocomplete = modoLogin === "entrar" ? "current-password" : "new-password";
+  $("#l-erro").textContent = ""; $("#l-ok").hidden = true;
+};
 $("#f-login").addEventListener("submit", async (e)=>{
   e.preventDefault();
-  $("#l-erro").textContent=""; $("#l-btn").disabled=true;
-  const { error } = await sb.auth.signInWithPassword({ email: $("#l-email").value.trim(), password: $("#l-senha").value });
+  const email = $("#l-email").value.trim(), senha = $("#l-senha").value;
+  $("#l-erro").textContent=""; $("#l-ok").hidden = true;
+  if(!email || senha.length < 8){ $("#l-erro").textContent = "Informe o e-mail e uma senha de pelo menos 8 caracteres."; return; }
+  $("#l-btn").disabled=true;
+  if(modoLogin === "entrar"){
+    const { error } = await sb.auth.signInWithPassword({ email, password: senha });
+    if(error) $("#l-erro").textContent = /invalid/i.test(error.message) ? "E-mail ou senha incorretos." : /confirm/i.test(error.message) ? "Confirme o e-mail pelo link que enviamos antes de entrar." : error.message;
+  } else {
+    const { data, error } = await sb.auth.signUp({ email, password: senha, options: { emailRedirectTo: location.origin + location.pathname } });
+    if(error) $("#l-erro").textContent = error.message;
+    else if(!data.session){ $("#l-ok").hidden = false; $("#l-ok").textContent = "Conta criada. Abra o link de confirmação que chegou no seu e-mail e depois entre aqui."; }
+  }
   $("#l-btn").disabled=false;
-  if(error) $("#l-erro").textContent = /invalid/i.test(error.message) ? "E-mail ou senha incorretos." : error.message;
 });
 $("#btn-sair").onclick = () => sb.auth.signOut();
 
