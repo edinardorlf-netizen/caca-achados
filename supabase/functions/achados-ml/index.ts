@@ -7,6 +7,8 @@
 //   POST { acao: "categorias" } → lista as categorias do Mercado Livre Brasil
 //   POST { acao: "buscar" }     → busca agora (só do dono logado)
 //   POST { acao: "desconectar" }
+//   POST { acao: "afiliado_ml", link } → aprende o código de afiliado a partir de um link e monta os links
+//   POST { acao: "telegram_testar" | "telegram_postar", id } · GET ?tarefa=postar (cron) → posta no Telegram
 //
 // Só leitura no Mercado Livre (escopo de leitura + offline_access). O link de afiliado
 // continua sendo gerado pelo dono no portal de afiliados.
@@ -182,9 +184,133 @@ async function buscar(dono: string, deadline: number) {
       avisos.push(`${(cfg.ml_categorias_nomes || {})[cat] || cat}: ${(e as Error).message}`);
     }
   }
-  const msg = `${vistos} mais vendidos conferidos, ${achados} com desconto de ${min}% ou mais (${novos} novos).${avisos.length ? " " + avisos.join(" ") : ""}`;
+  // Monta o link de afiliado nas ofertas novas (se o modelo do link já foi configurado)
+  const { data: nAfil } = await db.rpc("achados_aplicar_afiliado", { p_dono: dono });
+  const msg = `${vistos} mais vendidos conferidos, ${achados} com desconto de ${min}% ou mais (${novos} novos).${nAfil ? ` ${nAfil} com link de afiliado montado.` : ""}${avisos.length ? " " + avisos.join(" ") : ""}`;
   await db.from("achados_config").update({ ml_sinc_em: new Date().toISOString(), ml_sinc_ok: avisos.length === 0, ml_sinc_msg: msg.slice(0, 600) }).eq("dono", dono);
   return { vistos, achados, novos, avisos, msg };
+}
+
+// ---------- Link de afiliado do Mercado Livre (modelo) ----------
+// O dono cola um link de afiliado (curto ou completo). Seguimos os redirecionamentos até o endereço
+// final e guardamos só os parâmetros que identificam o afiliado, para repetir em qualquer produto.
+const PARAM_AFILIADO = /^(matt_[a-z_]+|forceinapp|ref|aff[a-z_]*|tracking_id_afiliado)$/i;
+const DOMINIO_ML = /(^|\.)(mercadolivre\.com(\.br)?|mercadolibre\.com|meli\.la)$/i;
+
+async function resolverLink(link: string) {
+  let atual = link.trim();
+  const caminho: string[] = [atual];
+  for (let i = 0; i < 8; i++) {
+    const u = new URL(atual);
+    if (!DOMINIO_ML.test(u.hostname)) throw new Error("O link precisa ser do Mercado Livre.");
+    if ([...u.searchParams.keys()].some((k) => PARAM_AFILIADO.test(k))) break;
+    const r = await fetch(atual, { redirect: "manual", headers: { "User-Agent": "CacaAchados/1.0", Accept: "text/html" } });
+    const loc = r.headers.get("location");
+    await r.body?.cancel();
+    if (!(r.status >= 300 && r.status < 400) || !loc) break;
+    atual = new URL(loc, atual).toString();
+    caminho.push(atual);
+  }
+  const final = new URL(atual);
+  const params = [...final.searchParams.entries()].filter(([k]) => PARAM_AFILIADO.test(k));
+  return { final: atual, caminho, params, todos: [...final.searchParams.keys()] };
+}
+
+// ---------- Telegram ----------
+const brl = (v: number | null) => (v == null || isNaN(v) ? "" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
+const escHtml = (s: string) => String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
+// deno-lint-ignore no-explicit-any
+const descontoDe = (o: any) => (o.preco_de && o.preco_por && Number(o.preco_de) > Number(o.preco_por) ? Math.round((1 - Number(o.preco_por) / Number(o.preco_de)) * 100) : null);
+// deno-lint-ignore no-explicit-any
+const pontuacao = (o: any) => Math.round((descontoDe(o) || 0) * 1.2 + (o.comissao || 0) * 2 + (o.cupom ? 8 : 0) + (o.ml_posicao ? Math.max(0, 12 - o.ml_posicao) : 0));
+const LOJA: Record<string, string> = { shopee: "na Shopee", meli: "no Mercado Livre", amazon: "na Amazon", tiktok: "no TikTok Shop" };
+
+// deno-lint-ignore no-explicit-any
+function postTelegram(o: any) {
+  const d = descontoDe(o);
+  const linhas = [
+    `${d && d >= 40 ? "🔥 ACHADÃO" : "🛒 ACHADO DO DIA"} ${LOJA[o.marketplace] || ""}`.trim(), "",
+    `<b>${escHtml(String(o.titulo).slice(0, 200))}</b>`, "",
+    o.preco_de && d ? `<s>De ${brl(Number(o.preco_de))}</s>` : null,
+    `✅ <b>Por ${brl(Number(o.preco_por))}</b>${d ? ` (${d}% OFF)` : ""}`,
+    o.cupom ? `🎟️ Cupom: <b>${escHtml(o.cupom)}</b>` : null,
+    o.nota ? `📌 ${escHtml(o.nota)}` : null, "",
+    `👉 <a href="${escHtml(o.link)}">Pegar a oferta</a>`, "",
+    "⚠️ Preço e estoque podem mudar a qualquer momento.",
+    "🔗 Link de afiliado: posso ganhar comissão, sem custo extra para você.",
+    "— O Cara dos Achados",
+  ];
+  return linhas.filter((x) => x !== null).join("\n");
+}
+
+async function tg(token: string, metodo: string, corpo: Record<string, unknown>) {
+  const r = await fetch(`https://api.telegram.org/bot${token}/${metodo}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!j.ok) throw new Error(`Telegram: ${j.description || `erro ${r.status}`}`);
+  return j.result;
+}
+
+async function configTg(dono: string) {
+  const { data: tok } = await db.rpc("achados_tg_token", { p_dono: dono });
+  const { data: cfg } = await db.from("achados_config").select("tg_chat_id,tg_ativo,tg_intervalo_min,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post").eq("dono", dono).single();
+  if (!tok) throw new Error("Falta o token do bot do Telegram.");
+  if (!cfg?.tg_chat_id) throw new Error("Falta o canal ou grupo do Telegram.");
+  return { token: tok as string, cfg };
+}
+
+// deno-lint-ignore no-explicit-any
+async function enviarOferta(dono: string, token: string, chat: string, o: any) {
+  const texto = postTelegram(o);
+  try {
+    if (o.imagem && texto.length <= 1024) await tg(token, "sendPhoto", { chat_id: chat, photo: o.imagem, caption: texto, parse_mode: "HTML" });
+    else throw new Error("sem foto");
+  } catch (_) {
+    await tg(token, "sendMessage", { chat_id: chat, text: texto, parse_mode: "HTML", link_preview_options: { is_disabled: false } });
+  }
+  const agora = new Date().toISOString();
+  const canais = [...new Set([...(o.canais || []), "telegram"])];
+  await db.from("achados_ofertas").update({ status: "postada", postado_em: agora, canais }).eq("id", o.id).eq("dono", dono);
+  await db.from("achados_config").update({ tg_ultimo_post: agora, tg_msg: `Postado: ${String(o.titulo).slice(0, 80)}` }).eq("dono", dono);
+}
+
+async function proximaOferta(dono: string, modo: string, minDesc: number) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  let q = db.from("achados_ofertas").select("*").eq("dono", dono).not("link", "is", null).eq("exemplo", false)
+    .or(`validade.is.null,validade.gte.${hoje}`).limit(300);
+  q = modo === "aprovadas" ? q.eq("status", "aprovada") : q.in("status", ["nova", "aprovada"]);
+  const { data } = await q;
+  // deno-lint-ignore no-explicit-any
+  const lst = (data || []).filter((o: any) => (descontoDe(o) || 0) >= minDesc);
+  // deno-lint-ignore no-explicit-any
+  lst.sort((a: any, b: any) => (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
+  return lst[0] || null;
+}
+
+function horaSP() {
+  return Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hourCycle: "h23" }).format(new Date()));
+}
+
+async function postarAgendado() {
+  const { data: donos } = await db.from("achados_config").select("dono").eq("tg_ativo", true);
+  const res: Record<string, unknown> = {};
+  for (const { dono } of donos || []) {
+    try {
+      const { token, cfg } = await configTg(dono);
+      const h = horaSP();
+      if (h < cfg.tg_hora_ini || h >= cfg.tg_hora_fim) { res[dono] = "fora do horário"; continue; }
+      if (cfg.tg_ultimo_post && Date.now() - Date.parse(cfg.tg_ultimo_post) < (cfg.tg_intervalo_min * 60 - 30) * 1000) { res[dono] = "aguardando intervalo"; continue; }
+      const o = await proximaOferta(dono, cfg.tg_modo, cfg.tg_desconto_min);
+      if (!o) { res[dono] = "nada para postar"; await db.from("achados_config").update({ tg_msg: "Nenhuma oferta com link e desconto suficiente na fila." }).eq("dono", dono); continue; }
+      await enviarOferta(dono, token, cfg.tg_chat_id, o);
+      res[dono] = `postado ${o.id}`;
+    } catch (e) {
+      res[dono] = { erro: (e as Error).message };
+      await db.from("achados_config").update({ tg_msg: (e as Error).message.slice(0, 300) }).eq("dono", dono);
+    }
+  }
+  return res;
 }
 
 // ---------- Retorno da autorização ----------
@@ -223,6 +349,7 @@ Deno.serve(async (req) => {
       const chave = req.headers.get("x-cron-key") || "";
       const { data: seg } = await db.from("segredos").select("valor").eq("chave", "cron").maybeSingle();
       if (!seg || chave !== seg.valor) return json({ erro: "não autorizado" }, 401);
+      if (tarefa === "postar") return json(await postarAgendado());
       if (tarefa !== "buscar") return json({ erro: "tarefa desconhecida" }, 400);
       const { data: donos } = await db.from("achados_config").select("dono").eq("ml_conectado", true);
       const res: Record<string, unknown> = {};
@@ -259,31 +386,40 @@ Deno.serve(async (req) => {
       return json({ categorias: cats });
     }
     if (body.acao === "buscar") return json(await buscar(email, deadline));
-    if (body.acao === "diagnostico") {
-      const t = await tokenDe(email);
-      const cat = String(body.categoria || "MLB1000");
-      const cru = async (p: string) => {
-        const r = await fetch(API + p, { headers: { Authorization: `Bearer ${t}`, Accept: "application/json" } });
-        const txt = await r.text();
-        return { status: r.status, corpo: txt.slice(0, 1500) };
-      };
-      if (Array.isArray(body.caminhos)) {
-        const res: Record<string, unknown> = {};
-        for (const p of body.caminhos.slice(0, 6)) if (typeof p === "string" && p.startsWith("/") && !p.includes("oauth")) res[p] = await cru(p);
-        return json(res);
+    if (body.acao === "afiliado_ml") {
+      const link = String(body.link || "");
+      if (!/^https?:\/\//i.test(link)) return json({ erro: "Cole o link completo, começando com https://" }, 400);
+      const r = await resolverLink(link);
+      if (!r.params.length) {
+        const onde = new URL(r.final);
+        return json({ erro: `Não encontrei o seu código de afiliado nesse link (ele termina em ${onde.hostname}${onde.pathname.slice(0, 40)}${r.todos.length ? `, com: ${r.todos.slice(0, 12).join(", ")}` : ", sem parâmetros"}). Gere pelo portal de afiliados escolhendo “link completo”, ou use o Compartilhar logado como afiliado.` }, 422);
       }
-      const h = await cru(`/highlights/MLB/category/${cat}`);
-      // deno-lint-ignore no-explicit-any
-      let content: any[] = [];
-      try { content = JSON.parse(h.corpo.length < 1500 ? h.corpo : (await (await fetch(API + `/highlights/MLB/category/${cat}`, { headers: { Authorization: `Bearer ${t}` } })).text())).content || []; } catch (_) { /* */ }
-      const it = content.find((c) => c.type === "ITEM"), pr = content.find((c) => c.type !== "ITEM");
-      return json({
-        highlights: { status: h.status, tipos: content.reduce((a, c) => ({ ...a, [c.type]: (a[c.type] || 0) + 1 }), {} as Record<string, number>), amostra: content.slice(0, 3) },
-        item: it ? await cru(`/items?ids=${it.id}&attributes=id,title,price,original_price,status`) : null,
-        sale_price: it ? await cru(`/items/${it.id}/sale_price`) : null,
-        produto: pr ? await cru(`/products/${pr.id}`) : null,
-        produto_itens: pr ? await cru(`/products/${pr.id}/items`) : null,
-      });
+      const query = r.params.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
+      await db.from("achados_config").update({ ml_afiliado_query: query, ml_afiliado_exemplo: r.final.slice(0, 1000), ml_afiliado_em: new Date().toISOString() }).eq("dono", email);
+      const { data: n } = await db.rpc("achados_aplicar_afiliado", { p_dono: email });
+      return json({ ok: true, parametros: r.params.map(([k]) => k), aplicados: n || 0 });
+    }
+    if (body.acao === "afiliado_ml_remover") {
+      await db.from("achados_ofertas").update({ link: null, link_auto: false }).eq("dono", email).eq("link_auto", true).in("status", ["nova", "aprovada"]);
+      await db.from("achados_config").update({ ml_afiliado_query: null, ml_afiliado_exemplo: null, ml_afiliado_em: null }).eq("dono", email);
+      return json({ ok: true });
+    }
+    if (body.acao === "telegram_testar") {
+      const { token, cfg } = await configTg(email);
+      const bot = await tg(token, "getMe", {});
+      const chat = await tg(token, "getChat", { chat_id: cfg.tg_chat_id });
+      await tg(token, "sendMessage", { chat_id: cfg.tg_chat_id, text: "✅ Caça Achados conectado. As ofertas vão aparecer aqui.\n— O Cara dos Achados" });
+      const nome = chat.title || chat.username || String(chat.id);
+      await db.from("achados_config").update({ tg_chat_nome: nome, tg_msg: `Conectado: @${bot.username} → ${nome}` }).eq("dono", email);
+      return json({ ok: true, bot: bot.username, chat: nome });
+    }
+    if (body.acao === "telegram_postar") {
+      const { token, cfg } = await configTg(email);
+      const { data: o } = await db.from("achados_ofertas").select("*").eq("dono", email).eq("id", String(body.id || "")).maybeSingle();
+      if (!o) return json({ erro: "Oferta não encontrada." }, 404);
+      if (!o.link) return json({ erro: "Essa oferta ainda não tem link de afiliado." }, 400);
+      await enviarOferta(email, token, cfg.tg_chat_id, o);
+      return json({ ok: true });
     }
     if (body.acao === "desconectar") {
       await db.rpc("achados_ml_desconectar", { p_dono: email });

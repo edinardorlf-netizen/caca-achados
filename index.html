@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icone-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..900&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="estilo.css?v=1">
+<link rel="stylesheet" href="estilo.css?v=2">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)} body{margin:0} img{max-width:100%} [hidden]{display:none!important}</style>
 </head>
 <body>
@@ -41,7 +41,7 @@
     <button role="tab" id="tab-cacar" aria-selected="false" data-v="cacar">Caçar</button>
     <button role="tab" id="tab-fila" aria-selected="true" data-v="fila">Fila de ofertas <span class="n" id="n-fila">0</span></button>
     <button role="tab" id="tab-postadas" aria-selected="false" data-v="postadas">Postadas</button>
-    <button role="tab" id="tab-ajustes" aria-selected="false" data-v="ajustes">Mercado Livre</button>
+    <button role="tab" id="tab-ajustes" aria-selected="false" data-v="ajustes">Ajustes</button>
   </nav>
 
   <!-- CAÇAR -->
@@ -93,7 +93,9 @@
             <a class="btn ghost" id="btn-tg" target="_blank" rel="noopener">Abrir no Telegram</a>
           </div>
           <div class="row" style="border-top:1px solid var(--line);padding-top:12px">
-            <button class="btn amarelo sm" id="btn-postada" type="button">Marcar como postada</button>
+            <button class="btn amarelo sm" id="btn-tg-post" type="button" hidden>Postar no Telegram agora</button>
+            <button class="btn ghost sm" id="btn-aprovar" type="button">Aprovar</button>
+            <button class="btn ghost sm" id="btn-postada" type="button">Marcar como postada</button>
             <button class="btn ghost sm" id="btn-editar" type="button">Editar</button>
             <button class="btn ghost sm" id="btn-descartar" type="button">Descartar</button>
           </div>
@@ -130,6 +132,44 @@
         <label class="f" for="ml-min" style="max-width:220px">Desconto mínimo (%)<input class="in" id="ml-min" type="number" min="0" max="90" step="5"></label>
         <div class="f">Categorias<div class="cats" id="ml-cats"><span class="hint">Conecte o Mercado Livre para escolher as categorias.</span></div></div>
         <div class="row"><button class="btn amarelo" id="ml-salvar-busca" type="button">Salvar escolhas</button><button class="btn ghost" id="ml-buscar" type="button">Buscar agora</button></div>
+      </div>
+    </div>
+    <div class="layout" style="margin-top:14px">
+      <div class="card">
+        <h2>Link de afiliado automático (Mercado Livre)</h2>
+        <p class="hint" id="af-status">Carregando…</p>
+        <ol class="passos">
+          <li>No portal de afiliados, abra <a href="https://www.mercadolivre.com.br/l/afiliados-gerar-link" target="_blank" rel="noopener">Gerador de link</a>, cole qualquer produto e escolha <b>link completo</b> (ou use o <b>Compartilhar</b> logado como afiliado).</li>
+          <li>Cole o link aqui. O Caça Achados descobre o seu código de afiliado e monta o link de todas as ofertas do Mercado Livre sozinho.</li>
+          <li>Teste: abra um link montado e confira no relatório do portal se o clique aparece.</li>
+        </ol>
+        <div class="row" style="flex-wrap:nowrap;margin-top:10px"><input class="in" id="af-link" inputmode="url" placeholder="https://mercadolivre.com/sec/… ou https://www.mercadolivre.com.br/…"><button class="btn" id="af-salvar" type="button">Usar este link</button></div>
+        <div class="row" id="af-acoes"></div>
+        <p class="hint" id="af-msg"></p>
+      </div>
+      <div class="card">
+        <h2>Telegram automático</h2>
+        <p class="hint" id="tg-status">Carregando…</p>
+        <ol class="passos">
+          <li>No Telegram, fale com <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>, mande <code>/newbot</code> e copie o <b>token</b> que ele der.</li>
+          <li>Adicione o bot como <b>administrador</b> do seu canal ou grupo (com permissão de postar).</li>
+          <li>Cole o token e o canal abaixo (<code>@nomedocanal</code> ou o número do grupo). O token fica no cofre do banco.</li>
+        </ol>
+        <form id="f-tg" class="fgrid" style="margin-top:10px" novalidate>
+          <label class="f" for="tg-token">Token do bot<input class="in" id="tg-token" type="password" autocomplete="off" placeholder="Deixe em branco para manter"></label>
+          <label class="f" for="tg-chat">Canal ou grupo<input class="in" id="tg-chat" autocomplete="off" placeholder="@ocaradosachados"></label>
+          <div class="f" style="justify-content:flex-end"><button class="btn" type="submit" id="tg-salvar">Salvar e testar</button></div>
+        </form>
+        <div class="fgrid" style="margin-top:12px">
+          <label class="f" for="tg-int">Postar a cada (min)<input class="in" id="tg-int" type="number" min="10" max="1440" step="5"></label>
+          <label class="f" for="tg-ini">Das (hora)<input class="in" id="tg-ini" type="number" min="0" max="23"></label>
+          <label class="f" for="tg-fim">Até (hora)<input class="in" id="tg-fim" type="number" min="1" max="24"></label>
+          <label class="f" for="tg-min">Desconto mínimo (%)<input class="in" id="tg-min" type="number" min="0" max="95" step="5"></label>
+          <label class="f w2" for="tg-modo">O que postar<select class="in" id="tg-modo"><option value="todas">As melhores da fila (com link)</option><option value="aprovadas">Só as que eu aprovar</option></select></label>
+        </div>
+        <label class="row" style="font-size:14px;gap:6px;margin-top:8px"><input type="checkbox" id="tg-ativo"> Postagem automática ligada</label>
+        <div class="row"><button class="btn amarelo" id="tg-salvar-agenda" type="button">Salvar agenda</button></div>
+        <p class="hint" id="tg-msg"></p>
       </div>
     </div>
   </section>
@@ -169,7 +209,7 @@
 
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=1"></script>
-<script src="app.js?v=1"></script>
+<script src="config.js?v=2"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>

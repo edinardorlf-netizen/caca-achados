@@ -19,7 +19,7 @@ const MKT = {
     dica:"No app: Perfil › Central de criadores › Afiliados › Mercado de produtos. Adicione à sua vitrine e use nas lives e vídeos (carrinho laranja)."},
   outro:{nome:"Outra loja",cor:"var(--outro)",links:[],dica:""},
 };
-let ofertas = [], selId = null, canal = "whatsapp", filtroMkt = "todas", editId = null, canalRT = null, cfgML = null, catsML = null;
+let ofertas = [], selId = null, canal = "whatsapp", filtroMkt = "todas", editId = null, canalRT = null, cfgML = null, catsML = null, tgPronto = false;
 const $ = (s) => document.querySelector(s);
 const brl = (v) => v == null || isNaN(v) ? "" : Number(v).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const num = (s) => { if (s == null || s === "") return null; const t = String(s).replace(/[^\d,.-]/g,""); const v = t.includes(",") ? Number(t.replace(/\./g,"").replace(",",".")) : Number(t); return isFinite(v) ? v : null; };
@@ -41,7 +41,7 @@ const errMsg = (e) => (e && (e.message || e.error_description || e.erro)) || Str
 // Banco ↔ tela
 const daLinha = (r) => ({ id:r.id, titulo:r.titulo, marketplace:r.marketplace, categoria:r.categoria, link:r.link, linkProduto:r.link_produto,
   precoDe: r.preco_de!=null?Number(r.preco_de):null, precoPor: r.preco_por!=null?Number(r.preco_por):null, cupom:r.cupom, comissao: r.comissao!=null?Number(r.comissao):null,
-  validade:r.validade, imagem:r.imagem, nota:r.nota, status:r.status, canais:r.canais||[], exemplo:r.exemplo, fonte:r.fonte, mlPosicao:r.ml_posicao, criadoEm:r.criado_em, postadoEm:r.postado_em });
+  validade:r.validade, imagem:r.imagem, nota:r.nota, status:r.status, canais:r.canais||[], exemplo:r.exemplo, fonte:r.fonte, linkAuto:r.link_auto, mlPosicao:r.ml_posicao, criadoEm:r.criado_em, postadoEm:r.postado_em });
 const paraLinha = (o) => ({ titulo:o.titulo, marketplace:o.marketplace, categoria:o.categoria||null, link:o.link||null, preco_de:o.precoDe, preco_por:o.precoPor,
   cupom:o.cupom||null, comissao:o.comissao, validade:o.validade||null, imagem:o.imagem||null, nota:o.nota||null });
 
@@ -118,7 +118,7 @@ function render(){
     return `<div class="oferta" role="button" tabindex="0" data-id="${o.id}" aria-current="${o.id===selId}" style="--c:${m.cor}">
       <div class="thumb">${o.imagem?`<img src="${esc(o.imagem)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:`<b>${m.nome}</b>`}</div>
       <div style="min-width:0"><div class="o-tit">${esc(o.titulo)}</div>
-        <div class="o-meta"><span class="tag mk">${m.nome}</span>${o.fonte==="ml"?`<span class="tag">Mais vendido${o.mlPosicao?` #${o.mlPosicao}`:""}</span>`:""}${o.exemplo?'<span class="tag ex">Exemplo</span>':""}${o.cupom?`<span class="tag">Cupom ${esc(o.cupom)}</span>`:""}${o.comissao?`<span class="tag ok">${String(o.comissao).replace(".",",")}% comissão</span>`:""}${vencida(o)?'<span class="tag warn">Vencida</span>':o.validade?`<span class="tag">até ${new Date(o.validade+"T12:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span>`:""}${!o.link?'<span class="tag warn">Sem link de afiliado</span>':""}</div>
+        <div class="o-meta"><span class="tag mk">${m.nome}</span>${o.fonte==="ml"?`<span class="tag">Mais vendido${o.mlPosicao?` #${o.mlPosicao}`:""}</span>`:""}${o.exemplo?'<span class="tag ex">Exemplo</span>':""}${o.cupom?`<span class="tag">Cupom ${esc(o.cupom)}</span>`:""}${o.comissao?`<span class="tag ok">${String(o.comissao).replace(".",",")}% comissão</span>`:""}${vencida(o)?'<span class="tag warn">Vencida</span>':o.validade?`<span class="tag">até ${new Date(o.validade+"T12:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span>`:""}${!o.link?'<span class="tag warn">Sem link de afiliado</span>':o.linkAuto?'<span class="tag ok">Link montado</span>':""}${o.status==="aprovada"?'<span class="tag ok">Aprovada</span>':""}</div>
         <div class="score">Nota ${score(o)}${o.categoria?` · ${esc(o.categoria)}`:""}</div></div>
       <div class="preco">${o.precoDe&&d?`<s>${brl(o.precoDe)}</s>`:""}<strong>${brl(o.precoPor)||"—"}</strong>${d?`<span class="off">-${d}%</span>`:""}</div>
     </div>`; }).join("");
@@ -134,6 +134,9 @@ function renderGerador(){
   document.querySelectorAll("#canais button").forEach(b=>b.setAttribute("aria-selected", b.dataset.c===canal));
   $("#post").value = gerarPost(o, canal); atualizaLinks();
   $("#btn-postada").textContent = o.status==="postada" ? "Já postada" : "Marcar como postada";
+  $("#btn-tg-post").hidden = !(tgPronto && o.link && o.status!=="postada");
+  $("#btn-aprovar").hidden = o.status==="postada";
+  $("#btn-aprovar").textContent = o.status==="aprovada" ? "Tirar aprovação" : "Aprovar";
 }
 function atualizaLinks(){
   const o = ofertas.find(x=>x.id===selId); const txt=$("#post").value;
@@ -204,7 +207,10 @@ $("#form").addEventListener("submit", async (e)=>{
   if(o.precoPor==null){ $("#ed-msg").textContent="Informe o preço por."; return; }
   $("#ed-salvar").disabled=true;
   try{
-    if(editId){ await salvarOferta(editId, paraLinha(o)); selId=editId; toast("Oferta atualizada"); }
+    if(editId){
+      const antes = ofertas.find(x=>x.id===editId);
+      const patch = paraLinha(o); if(!antes || (antes.link||"") !== (o.link||"")) patch.link_auto = false;
+      await salvarOferta(editId, patch); selId=editId; toast("Oferta atualizada"); }
     else {
       const { data, error } = await sb.from("achados_ofertas").insert({...paraLinha(o), status:"nova", fonte:"manual"}).select("id").single();
       if(error) throw error;
@@ -232,7 +238,7 @@ $("#btn-copiar").onclick = async () => {
 $("#fl-salvar").onclick = async () => {
   const v = $("#fl-link").value.trim();
   if(!/^https?:\/\//i.test(v)){ toast("Cole o link completo, começando com https://"); return; }
-  try{ await salvarOferta(selId, { link: v }); $("#fl-link").value=""; toast("Link de afiliado salvo"); }catch(err){ toast("Não consegui salvar: "+errMsg(err)); }
+  try{ await salvarOferta(selId, { link: v, link_auto: false }); $("#fl-link").value=""; toast("Link de afiliado salvo"); }catch(err){ toast("Não consegui salvar: "+errMsg(err)); }
 };
 async function setStatus(status){
   const o = ofertas.find(x=>x.id===selId); if(!o) return;
@@ -243,19 +249,33 @@ async function setStatus(status){
   catch(err){ toast("Não consegui salvar: "+errMsg(err)); }
 }
 $("#btn-postada").onclick = () => setStatus("postada");
+$("#btn-aprovar").onclick = async () => {
+  const o = ofertas.find(x=>x.id===selId); if(!o) return;
+  const novo = o.status==="aprovada" ? "nova" : "aprovada";
+  try{ await salvarOferta(o.id, { status: novo }); toast(novo==="aprovada" ? "Aprovada: entra na frente da fila do Telegram" : "Aprovação retirada"); }
+  catch(err){ toast("Não consegui salvar: "+errMsg(err)); }
+};
+$("#btn-tg-post").onclick = async () => {
+  const b=$("#btn-tg-post"); b.disabled=true;
+  try{ await chamarML("telegram_postar", { id: selId }); toast("Postado no Telegram"); await carregarOfertas(); }
+  catch(err){ toast(errMsg(err)); }
+  b.disabled=false;
+};
 $("#btn-descartar").onclick = () => setStatus("descartada");
 $("#btn-editar").onclick = () => { const o=ofertas.find(x=>x.id===selId); if(o) abrirEditor(o, o.id); };
 
 // ---------- Mercado Livre ----------
-async function chamarML(acao){
+async function chamarML(acao, extra={}){
   const { data:{ session } } = await sb.auth.getSession();
-  const r = await fetch(FN, { method:"POST", headers:{ "Content-Type":"application/json", Authorization:`Bearer ${session?.access_token||""}`, apikey: CFG.key }, body: JSON.stringify({ acao }) });
+  const r = await fetch(FN, { method:"POST", headers:{ "Content-Type":"application/json", Authorization:`Bearer ${session?.access_token||""}`, apikey: CFG.key }, body: JSON.stringify({ acao, ...extra }) });
   const j = await r.json().catch(()=>({}));
   if(!r.ok || j.erro) throw new Error(j.erro || `Erro ${r.status}`);
   return j;
 }
 async function carregarML(){
-  const [st, cf] = await Promise.all([ sb.rpc("achados_ml_status"), sb.from("achados_config").select("ml_client_id,ml_categorias,ml_categorias_nomes,desconto_min").maybeSingle() ]);
+  const [st, cf, ts] = await Promise.all([ sb.rpc("achados_ml_status"),
+    sb.from("achados_config").select("ml_client_id,ml_categorias,ml_categorias_nomes,desconto_min,ml_afiliado_query,ml_afiliado_em,tg_ativo,tg_intervalo_min,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post,tg_msg").maybeSingle(),
+    sb.rpc("achados_tg_status") ]);
   const s = (st.data||[])[0] || {};
   cfgML = cf.data || { ml_categorias:[], ml_categorias_nomes:{}, desconto_min:20 };
   $("#ml-status").innerHTML = s.conectado ? `<span class="ponto on"></span> Conectado${s.nickname?` como <b>${esc(s.nickname)}</b>`:""}`
@@ -267,7 +287,58 @@ async function carregarML(){
   $("#ml-min").value = cfgML.desconto_min ?? 20;
   if(s.conectado && !catsML){ try{ catsML = (await chamarML("categorias")).categorias || []; }catch(e){ $("#ml-cats").innerHTML = `<span class="erro">${esc(errMsg(e))}</span>`; } }
   renderCats(s.conectado);
+  renderAfiliado(); renderTelegram((ts.data||[])[0] || {});
 }
+function renderAfiliado(){
+  const q = cfgML.ml_afiliado_query;
+  const nomes = q ? q.split("&").map(p=>decodeURIComponent(p.split("=")[0])).join(", ") : "";
+  $("#af-status").innerHTML = q ? `<span class="ponto on"></span> Ligado desde ${new Date(cfgML.ml_afiliado_em).toLocaleDateString("pt-BR")} · código em: <code>${esc(nomes)}</code>` : `<span class="ponto"></span> Desligado: as ofertas do Mercado Livre chegam sem link de afiliado.`;
+  $("#af-acoes").innerHTML = q ? `<button class="btn ghost sm" id="af-remover" type="button">Desligar e apagar links montados</button>` : "";
+}
+function renderTelegram(t){
+  tgPronto = !!(t.tem_token && t.chat_id);
+  $("#tg-status").innerHTML = tgPronto ? `<span class="ponto ${cfgML.tg_ativo?"on":""}"></span> Bot salvo · canal <b>${esc(t.chat_nome||t.chat_id)}</b> · automático ${cfgML.tg_ativo?"<b>ligado</b>":"desligado"}${cfgML.tg_ultimo_post?` · último post ${new Date(cfgML.tg_ultimo_post).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}`:""}` : `<span class="ponto"></span> Ainda não configurado.`;
+  $("#tg-chat").value = t.chat_id || "";
+  $("#tg-int").value = cfgML.tg_intervalo_min ?? 60; $("#tg-ini").value = cfgML.tg_hora_ini ?? 8; $("#tg-fim").value = cfgML.tg_hora_fim ?? 22;
+  $("#tg-min").value = cfgML.tg_desconto_min ?? 30; $("#tg-modo").value = cfgML.tg_modo || "todas"; $("#tg-ativo").checked = !!cfgML.tg_ativo;
+  $("#tg-msg").textContent = cfgML.tg_msg || "";
+  renderGerador();
+}
+$("#af-salvar").onclick = async () => {
+  const v = $("#af-link").value.trim();
+  if(!/^https?:\/\//i.test(v)){ $("#af-msg").textContent = "Cole o link completo, começando com https://"; return; }
+  const b=$("#af-salvar"); b.disabled=true; $("#af-msg").textContent="Lendo o link…";
+  try{ const r = await chamarML("afiliado_ml", { link: v }); $("#af-link").value=""; $("#af-msg").textContent = `Pronto! Código encontrado (${r.parametros.join(", ")}). ${r.aplicados} oferta(s) já ganharam link de afiliado.`; await carregarOfertas(); await carregarML(); }
+  catch(err){ $("#af-msg").textContent = errMsg(err); }
+  b.disabled=false;
+};
+$("#af-acoes").addEventListener("click", async (e)=>{
+  if(e.target.id!=="af-remover") return;
+  try{ await chamarML("afiliado_ml_remover"); toast("Link automático desligado"); await carregarOfertas(); await carregarML(); }catch(err){ toast(errMsg(err)); }
+});
+$("#f-tg").addEventListener("submit", async (e)=>{
+  e.preventDefault();
+  const tok = $("#tg-token").value.trim(), chat = $("#tg-chat").value.trim();
+  $("#tg-salvar").disabled=true; $("#tg-msg").textContent="Salvando…";
+  const { error } = await sb.rpc("achados_salvar_tg", { p_token: tok || null, p_chat: chat });
+  if(error){ $("#tg-msg").textContent = error.message; $("#tg-salvar").disabled=false; return; }
+  $("#tg-token").value="";
+  try{ const r = await chamarML("telegram_testar"); toast(`Telegram conectado: @${r.bot} → ${r.chat}`); }
+  catch(err){ $("#tg-msg").textContent = errMsg(err); }
+  $("#tg-salvar").disabled=false; await carregarML();
+});
+$("#tg-salvar-agenda").onclick = async () => {
+  const lim = (v,a,b,d) => { const n = Number(v); return isFinite(n) && v!=="" ? Math.max(a, Math.min(b, Math.round(n))) : d; };
+  const patch = { tg_intervalo_min: lim($("#tg-int").value,10,1440,60), tg_hora_ini: lim($("#tg-ini").value,0,23,8), tg_hora_fim: lim($("#tg-fim").value,1,24,22),
+    tg_desconto_min: lim($("#tg-min").value,0,95,30), tg_modo: $("#tg-modo").value, tg_ativo: $("#tg-ativo").checked };
+  if(patch.tg_ativo && !tgPronto) return toast("Salve o bot e o canal antes de ligar o automático.");
+  if(patch.tg_hora_fim <= patch.tg_hora_ini) return toast("A hora final precisa ser depois da inicial.");
+  const { data:{ user } } = await sb.auth.getUser();
+  const { error } = await sb.from("achados_config").update(patch).eq("dono", (user?.email||"").toLowerCase());
+  if(error) return toast("Não consegui salvar: "+error.message);
+  toast(patch.tg_ativo ? `Automático ligado: 1 post a cada ${patch.tg_intervalo_min} min, das ${patch.tg_hora_ini}h às ${patch.tg_hora_fim}h` : "Agenda salva (automático desligado)");
+  carregarML();
+};
 function renderCats(conectado){
   if(!conectado){ $("#ml-cats").innerHTML = `<span class="hint">Conecte o Mercado Livre para escolher as categorias.</span>`; return; }
   if(!catsML) return;
