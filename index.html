@@ -136,6 +136,18 @@
     </div>
     <div class="layout" style="margin-top:14px">
       <div class="card">
+        <h2>Canais de divulgação</h2>
+        <p class="hint">Esses links aparecem na sua <b>Vitrine</b>, a página pública com os achados postados nos últimos 7 dias (e os que você aprovar). Use a Vitrine como <b>link na bio</b> do Instagram e do TikTok.</p>
+        <div class="row" style="flex-wrap:nowrap"><input class="in" id="vit-url" readonly><button class="btn sm" id="vit-copiar" type="button">Copiar</button><a class="btn ghost sm" id="vit-abrir" target="_blank" rel="noopener">Abrir</a></div>
+        <div class="fgrid">
+          <label class="f w2" for="vit-telegram">Canal do Telegram<input class="in" id="vit-telegram" inputmode="url" placeholder="https://t.me/ocaradosachados"></label>
+          <label class="f w2" for="vit-whatsapp">Canal do WhatsApp<input class="in" id="vit-whatsapp" inputmode="url" placeholder="https://whatsapp.com/channel/…"></label>
+          <label class="f w2" for="vit-instagram">Instagram<input class="in" id="vit-instagram" inputmode="url" placeholder="https://instagram.com/ocaradosachados"></label>
+          <label class="f w2" for="vit-tiktok">TikTok<input class="in" id="vit-tiktok" inputmode="url" placeholder="https://www.tiktok.com/@ocaradosachados01"></label>
+        </div>
+        <div class="row"><button class="btn amarelo" id="vit-salvar" type="button">Salvar canais</button></div>
+      </div>
+      <div class="card">
         <h2>Link de afiliado automático (Mercado Livre)</h2>
         <p class="hint" id="af-status">Carregando…</p>
         <ol class="passos">
@@ -257,6 +269,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=2"></script>
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>

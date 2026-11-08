@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>O Cara dos Achados · Vitrine</title>
+<meta name="description" content="Os achados e promoções do dia selecionados pelo O Cara dos Achados: Shopee, Mercado Livre, Amazon e mais.">
+<meta name="theme-color" content="#16140F">
+<meta property="og:title" content="O Cara dos Achados · Achados do dia">
+<meta property="og:description" content="Promoções selecionadas todo dia. Toque e aproveite.">
+<link rel="icon" href="icone.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icone-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..900&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+:root{
+  --bg:#F6F4EE; --surface:#FFFFFF; --ink:#16140F; --ink-2:#5D584C; --line:#E4DFD2;
+  --yellow:#FFC81E; --black:#16140F; --ok:#1F7A3D;
+  --shopee:#EE4D2D; --meli:#2D3277; --amazon:#C77700; --tiktok:#FE2C55; --outro:#6B6B6B;
+  --f-display:"Archivo","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121110; --surface:#1C1A17; --ink:#F3EFE4; --ink-2:#AAA393; --line:#2E2B26; --ok:#5BD37F;
+  --meli:#8E95F2; --amazon:#FFB13D; --outro:#9A9A9A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121110; --surface:#1C1A17; --ink:#F3EFE4; --ink-2:#AAA393; --line:#2E2B26; --ok:#5BD37F;
+  --meli:#8E95F2; --amazon:#FFB13D; --outro:#9A9A9A; color-scheme:dark}
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45}
+img{max-width:100%;display:block}
+[hidden]{display:none!important}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--yellow);outline-offset:2px}
+.topo{background:var(--black);color:#fff}
+.topo .in{max-width:1080px;margin:0 auto;padding:22px max(16px,env(safe-area-inset-left,0px)) 20px;display:flex;flex-direction:column;gap:14px}
+.marca{display:flex;align-items:center;gap:14px}
+.selo{width:64px;height:64px;border-radius:14px;background:var(--black);border:2px solid var(--yellow);display:grid;place-items:center;flex:none}
+.selo span{font-family:var(--f-display);font-weight:900;font-stretch:75%;color:var(--yellow);font-size:13px;line-height:1;text-align:center}
+.marca h1{margin:0;font-family:var(--f-display);font-weight:900;font-stretch:85%;font-size:30px;line-height:1;letter-spacing:-.01em}
+.marca p{margin:4px 0 0;color:#CFC9BB;font-size:14px}
+.canais{display:flex;gap:8px;flex-wrap:wrap}
+.canal{display:inline-flex;align-items:center;gap:8px;text-decoration:none;font-weight:600;font-size:14px;background:#2A2722;color:#fff;border-radius:999px;padding:9px 14px;min-height:40px}
+.canal.dest{background:var(--yellow);color:var(--black)}
+.canal svg{width:18px;height:18px;flex:none}
+main{max-width:1080px;margin:0 auto;padding:16px max(16px,env(safe-area-inset-left,0px)) 48px;display:flex;flex-direction:column;gap:14px}
+.barra{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.busca{flex:1 1 220px;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 12px;font:inherit;color:inherit}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 12px;font:600 13px var(--f-body);color:var(--ink-2);cursor:pointer;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:12px}
+.item{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;text-decoration:none;color:inherit;position:relative}
+.item .foto{aspect-ratio:1/1;background:#fff;display:grid;place-items:center;overflow:hidden}
+.item .foto img{width:100%;height:100%;object-fit:contain}
+.item .foto b{font-family:var(--f-display);color:#999}
+.off{position:absolute;top:10px;left:10px;background:var(--yellow);color:var(--black);font:800 15px var(--f-display);padding:4px 8px;border-radius:8px}
+.item .info{padding:12px;display:flex;flex-direction:column;gap:6px;flex:1}
+.loja{font:600 12px var(--f-mono);color:var(--c);text-transform:uppercase;letter-spacing:.04em}
+.tit{font-weight:600;font-size:14.5px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.precos{margin-top:auto;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.precos s{color:var(--ink-2);font-size:13px}
+.precos strong{font:800 22px var(--f-display);font-variant-numeric:tabular-nums}
+.cupom{font:600 12.5px var(--f-mono);color:var(--ok)}
+.ver{margin:0 12px 12px;text-align:center;background:var(--black);color:#fff;border-radius:10px;padding:10px;font-weight:600}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .ver{background:var(--yellow);color:var(--black)}}
+.vazio{text-align:center;color:var(--ink-2);padding:40px 12px;border:1px dashed var(--line);border-radius:12px}
+.aviso{font-size:12.5px;color:var(--ink-2);text-align:center;max-width:640px;margin:8px auto 0}
+</style>
+</head>
+<body>
+<header class="topo">
+  <div class="in">
+    <div class="marca">
+      <div class="selo" aria-hidden="true"><span>O CARA<br>DOS<br>ACHADOS</span></div>
+      <div><h1>Achados do dia</h1><p>Promoções selecionadas todo dia. Toque e aproveite antes que acabe.</p></div>
+    </div>
+    <nav class="canais" id="canais" aria-label="Canais"></nav>
+  </div>
+</header>
+<main>
+  <div class="barra">
+    <input class="busca" id="busca" type="search" placeholder="Procurar achado (ex.: fone, air fryer)" aria-label="Procurar">
+  </div>
+  <div class="chips" id="lojas" role="group" aria-label="Filtrar por loja"></div>
+  <div class="grade" id="grade" aria-live="polite"><div class="vazio">Carregando os achados…</div></div>
+  <p class="aviso">Os links desta página são de afiliado: posso ganhar comissão, sem custo extra para você. Como associado da Amazon, eu ganho com compras qualificadas. Preço e estoque podem mudar a qualquer momento.</p>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<script src="config.js?v=2"></script>
+<script>
+const CFG = window.ACHADOS_CONFIG;
+const sb = supabase.createClient(CFG.url, CFG.key, { auth: { persistSession: false } });
+const LOJAS = { shopee:["Shopee","var(--shopee)"], meli:["Mercado Livre","var(--meli)"], amazon:["Amazon","var(--amazon)"], tiktok:["TikTok Shop","var(--tiktok)"], outro:["Loja","var(--outro)"] };
+const ICONES = {
+  telegram:'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.9 4.3 18.6 20c-.2 1.1-.9 1.4-1.8.9l-5-3.7-2.4 2.3c-.3.3-.5.5-1 .5l.4-5.1 9.3-8.4c.4-.4-.1-.6-.6-.2L6 13.5l-4.9-1.5c-1.1-.3-1.1-1.1.2-1.6L20.5 3c.9-.3 1.7.2 1.4 1.3z"/></svg>',
+  whatsapp:'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2c-1.5 0-3-.4-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1-.7-.3-1.4-.7-2-1.3-.5-.5-1-1.1-1.3-1.7-.1-.2 0-.4.1-.5l.4-.5.3-.4v-.5l-.8-1.9c-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.3-.6.6-.9 1.4-.9 2.2 0 .9.4 1.8.9 2.5 1 1.5 2.3 2.7 3.9 3.4 1.3.6 1.9.6 2.6.5.6-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2l-.6-.2z"/></svg>',
+  instagram:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor"/></svg>',
+  tiktok:'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.6 3c.3 2.2 1.6 3.6 3.9 3.8v2.6c-1.4.1-2.6-.3-3.9-1.1v5.6c0 6.9-7.5 9-10.5 4.1-1.9-3.2-.7-8.7 5.6-8.9v2.9c-.5.1-1 .2-1.4.4-1.4.5-2.2 1.4-2 3 .4 3.1 6.1 4 5.6-2V3h2.7z"/></svg>',
+};
+let ofertas = [], loja = "todas";
+const $ = (s) => document.querySelector(s);
+const brl = (v) => v == null ? "" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[c]);
+const desc = (o) => o.preco_de && o.preco_por && Number(o.preco_de) > Number(o.preco_por) ? Math.round((1 - o.preco_por / o.preco_de) * 100) : null;
+const semAcento = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const linkSeguro = (u) => /^https:\/\//i.test(u || "") ? u : "#";
+
+function render(){
+  const q = semAcento($("#busca").value.trim());
+  const presentes = Object.keys(LOJAS).filter((k) => ofertas.some((o) => o.marketplace === k));
+  $("#lojas").innerHTML = ["todas", ...presentes].map((k) => `<button class="chip" data-k="${k}" aria-pressed="${loja === k}">${k === "todas" ? "Todas" : LOJAS[k][0]}</button>`).join("");
+  $("#lojas").hidden = presentes.length < 2;
+  const lst = ofertas.filter((o) => (loja === "todas" || o.marketplace === loja) && (!q || semAcento(o.titulo + " " + (o.categoria || "")).includes(q)));
+  if (!lst.length) { $("#grade").innerHTML = `<div class="vazio">${ofertas.length ? "Nada com esse nome agora. Tente outra palavra." : "Os achados de hoje estão chegando. Volte daqui a pouco ou siga os canais acima para não perder nada."}</div>`; return; }
+  $("#grade").innerHTML = lst.map((o) => {
+    const d = desc(o), l = LOJAS[o.marketplace] || LOJAS.outro;
+    return `<a class="item" href="${esc(linkSeguro(o.link))}" target="_blank" rel="noopener sponsored" style="--c:${l[1]}">
+      <div class="foto">${o.imagem ? `<img src="${esc(o.imagem)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : `<b>${l[0]}</b>`}</div>
+      ${d ? `<span class="off">-${d}%</span>` : ""}
+      <div class="info"><span class="loja">${l[0]}</span><span class="tit">${esc(o.titulo)}</span>
+        ${o.cupom ? `<span class="cupom">Cupom: ${esc(o.cupom)}</span>` : ""}
+        <div class="precos">${o.preco_de && d ? `<s>${brl(o.preco_de)}</s>` : ""}<strong>${brl(o.preco_por)}</strong></div></div>
+      <span class="ver">Ver oferta</span></a>`;
+  }).join("");
+}
+
+async function carregar(){
+  const slug = (new URLSearchParams(location.search).get("c") || "ocaradosachados").toLowerCase();
+  const { data, error } = await sb.rpc("achados_vitrine", { p_slug: slug });
+  if (error || !data?.perfil) { $("#grade").innerHTML = `<div class="vazio">Não consegui carregar os achados agora. Tente de novo em instantes.</div>`; return; }
+  const p = data.perfil;
+  const canais = [["telegram","Telegram",p.telegram,true],["whatsapp","WhatsApp",p.whatsapp,true],["instagram","Instagram",p.instagram],["tiktok","TikTok",p.tiktok]].filter((c) => c[2]);
+  $("#canais").innerHTML = canais.map(([k, n, u, dest]) => `<a class="canal${dest ? " dest" : ""}" href="${esc(linkSeguro(u))}" target="_blank" rel="noopener">${ICONES[k]}${dest ? `Entrar no ${n}` : n}</a>`).join("");
+  $("#canais").hidden = !canais.length;
+  ofertas = data.ofertas || [];
+  render();
+}
+$("#busca").addEventListener("input", render);
+$("#lojas").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (b) { loja = b.dataset.k; render(); } });
+carregar();
+</script>
+</body>
+</html>

@@ -285,7 +285,7 @@ async function chamarML(acao, extra={}, url=FN){
 }
 async function carregarML(){
   const [st, cf, ts, ss] = await Promise.all([ sb.rpc("achados_ml_status"),
-    sb.from("achados_config").select("ml_client_id,ml_categorias,ml_categorias_nomes,desconto_min,ml_afiliado_query,ml_afiliado_em,tg_ativo,tg_intervalo_min,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post,tg_msg,shp_app_id,shp_ativo,shp_palavras,shp_top,shp_desconto_min,shp_comissao_min,shp_sinc_em,shp_sinc_ok,shp_sinc_msg,amz_tag").maybeSingle(),
+    sb.from("achados_config").select("ml_client_id,ml_categorias,ml_categorias_nomes,desconto_min,ml_afiliado_query,ml_afiliado_em,tg_ativo,tg_intervalo_min,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post,tg_msg,shp_app_id,shp_ativo,shp_palavras,shp_top,shp_desconto_min,shp_comissao_min,shp_sinc_em,shp_sinc_ok,shp_sinc_msg,amz_tag,vit_slug,vit_telegram,vit_whatsapp,vit_instagram,vit_tiktok").maybeSingle(),
     sb.rpc("achados_tg_status"), sb.rpc("achados_shp_status") ]);
   const s = (st.data||[])[0] || {};
   cfgML = cf.data || { ml_categorias:[], ml_categorias_nomes:{}, desconto_min:20 };
@@ -300,6 +300,9 @@ async function carregarML(){
   renderCats(s.conectado);
   renderAfiliado(); renderTelegram((ts.data||[])[0] || {}); renderShopee((ss.data||[])[0] || {});
   amzTag = cfgML.amz_tag || null; $("#amz-tag").value = amzTag || "";
+  const vurl = new URL("vitrine.html", location.href); if(cfgML.vit_slug && cfgML.vit_slug!=="ocaradosachados") vurl.searchParams.set("c", cfgML.vit_slug);
+  $("#vit-url").value = vurl.toString(); $("#vit-abrir").href = vurl.toString();
+  ["telegram","whatsapp","instagram","tiktok"].forEach(k=> $("#vit-"+k).value = cfgML["vit_"+k] || "");
   $("#amz-status").innerHTML = amzTag ? `<span class="ponto on"></span> Tag <b>${esc(amzTag)}</b> ativa nos links da Amazon.` : `<span class="ponto"></span> Sem tag: os links da Amazon ficam como você colar.`;
 }
 function renderShopee(t){
@@ -375,6 +378,23 @@ $("#shp-buscar").onclick = async () => {
   try{ const r = await chamarML("buscar", {}, FN_SHP); toast(r.msg || "Busca concluída"); await carregarOfertas(); }
   catch(err){ toast(errMsg(err)); }
   b.disabled=false; b.textContent="Buscar agora"; carregarML();
+};
+$("#vit-copiar").onclick = async () => { try{ await navigator.clipboard.writeText($("#vit-url").value); toast("Link da Vitrine copiado"); }catch{ $("#vit-url").select(); toast("Selecionei o link: use Copiar do seu aparelho"); } };
+$("#vit-salvar").onclick = async () => {
+  const regras = { telegram:/^https:\/\/(t\.me|telegram\.me)\//i, whatsapp:/^https:\/\/(whatsapp\.com|chat\.whatsapp\.com|wa\.me)\//i, instagram:/^https:\/\/(www\.)?instagram\.com\//i, tiktok:/^https:\/\/(www\.)?tiktok\.com\//i };
+  const nomes = { telegram:"Telegram", whatsapp:"WhatsApp", instagram:"Instagram", tiktok:"TikTok" };
+  const patch = {};
+  for(const k of Object.keys(regras)){
+    let v = $("#vit-"+k).value.trim();
+    if(v && !/^https?:\/\//i.test(v)) v = "https://" + v.replace(/^\/+/, "");
+    v = v.replace(/^http:/i, "https:");
+    if(v && !regras[k].test(v)) return toast(`O link do ${nomes[k]} não parece certo (ex.: ${$("#vit-"+k).placeholder}).`);
+    patch["vit_"+k] = v || null;
+  }
+  const { data:{ user } } = await sb.auth.getUser();
+  const { error } = await sb.from("achados_config").update(patch).eq("dono", (user?.email||"").toLowerCase());
+  if(error) return toast("Não consegui salvar: "+error.message);
+  toast("Canais salvos na Vitrine"); carregarML();
 };
 $("#amz-salvar").onclick = async () => {
   const t = $("#amz-tag").value.trim();
