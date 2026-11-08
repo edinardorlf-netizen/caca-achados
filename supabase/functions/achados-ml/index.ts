@@ -194,7 +194,7 @@ async function buscar(dono: string, deadline: number) {
 // ---------- Link de afiliado do Mercado Livre (modelo) ----------
 // O dono cola um link de afiliado (curto ou completo). Seguimos os redirecionamentos até o endereço
 // final e guardamos só os parâmetros que identificam o afiliado, para repetir em qualquer produto.
-const PARAM_AFILIADO = /^(matt_[a-z_]+|forceinapp|ref|aff[a-z_]*|tracking_id_afiliado)$/i;
+const PARAM_AFILIADO = /^(matt_[a-z_]+|forceinapp|aff[a-z_]*|tracking_id_afiliado)$/i; // "ref" fica de fora: é cifrado e vale só para o produto do link
 const DOMINIO_ML = /(^|\.)(mercadolivre\.com(\.br)?|mercadolibre\.com|meli\.la)$/i;
 
 async function resolverLink(link: string) {
