@@ -87,7 +87,7 @@ function gerarPost(o, c){
       o.nota ? `📌 ${o.nota}` : null, "",
       `👉 ${link}`, "",
       "⚠️ Preço e estoque podem mudar a qualquer momento.",
-      aviso ? "🔗 Link de afiliado: posso ganhar comissão, sem custo extra para você." : null,
+      aviso ? (o.marketplace==="amazon" ? "🔗 Como associado da Amazon, eu ganho com compras qualificadas." : "🔗 Link de afiliado: posso ganhar comissão, sem custo extra para você.") : null,
       c==="whatsapp" ? "_O Cara dos Achados_" : "— O Cara dos Achados",
     ].filter(x=>x!==null).join("\n");
   }
