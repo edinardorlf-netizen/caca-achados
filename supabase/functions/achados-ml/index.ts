@@ -204,6 +204,9 @@ async function resolverLink(link: string) {
     const u = new URL(atual);
     if (!DOMINIO_ML.test(u.hostname)) throw new Error("O link precisa ser do Mercado Livre.");
     if ([...u.searchParams.keys()].some((k) => PARAM_AFILIADO.test(k))) break;
+    // Verificação anti-robô do Mercado Livre: o endereço de destino vem no parâmetro "go".
+    const go = u.searchParams.get("go");
+    if (/verification|captcha/i.test(u.pathname) && go) { atual = new URL(go, atual).toString(); caminho.push(atual); break; }
     const r = await fetch(atual, { redirect: "manual", headers: { "User-Agent": "CacaAchados/1.0", Accept: "text/html" } });
     const loc = r.headers.get("location");
     await r.body?.cancel();
