@@ -70,7 +70,7 @@ async function tokenDe(dono: string): Promise<string> {
 let ultimo = 0;
 // deno-lint-ignore no-explicit-any
 async function ml(path: string, token: string): Promise<any> {
-  const espera = ultimo + 250 - Date.now();
+  const espera = ultimo + 60 - Date.now();
   if (espera > 0) await sleep(espera);
   ultimo = Date.now();
   const r = await fetch(API + path, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } });
@@ -114,19 +114,32 @@ async function detalharItens(ids: string[], token: string, pos: Map<string, numb
 
 async function detalharProdutos(ids: string[], token: string, pos: Map<string, number>): Promise<Achado[]> {
   const out: Achado[] = [];
-  for (const id of ids) {
+  const fila = [...ids];
+  const trabalhador = async () => {
+   while (fila.length) {
+    const id = fila.shift()!;
     try {
       const p = await ml(`/products/${id}`, token);
-      const w = p && p.buy_box_winner;
-      if (!p || !w || w.price == null) continue;
+      if (!p) continue;
+      // O "buy_box_winner" costuma vir vazio; as ofertas do produto ficam em /products/{id}/items.
+      let w = p.buy_box_winner;
+      if (!w || w.price == null) {
+        const its = await ml(`/products/${id}/items`, token).catch(() => null);
+        // deno-lint-ignore no-explicit-any
+        const rs: any[] = (its && its.results) || [];
+        w = rs.filter((r) => r.price != null).sort((a, b) => Number(a.price) - Number(b.price))[0];
+      }
+      if (!w || w.price == null) continue;
       out.push({
         id: w.item_id || id, titulo: p.name, preco_por: Number(w.price),
         preco_de: w.original_price != null ? Number(w.original_price) : null,
         link_produto: p.permalink || `https://www.mercadolivre.com.br/p/${id}`,
         imagem: imgHttps(p.pictures?.[0]?.secure_url || p.pictures?.[0]?.url), posicao: pos.get(id) || 0,
       });
-    } catch (_) { /* produto sem vencedor de compra ou indisponível */ }
-  }
+    } catch (_) { /* produto sem oferta ativa ou indisponível */ }
+   }
+  };
+  await Promise.all([trabalhador(), trabalhador(), trabalhador(), trabalhador()]);
   return out;
 }
 
@@ -246,6 +259,32 @@ Deno.serve(async (req) => {
       return json({ categorias: cats });
     }
     if (body.acao === "buscar") return json(await buscar(email, deadline));
+    if (body.acao === "diagnostico") {
+      const t = await tokenDe(email);
+      const cat = String(body.categoria || "MLB1000");
+      const cru = async (p: string) => {
+        const r = await fetch(API + p, { headers: { Authorization: `Bearer ${t}`, Accept: "application/json" } });
+        const txt = await r.text();
+        return { status: r.status, corpo: txt.slice(0, 1500) };
+      };
+      if (Array.isArray(body.caminhos)) {
+        const res: Record<string, unknown> = {};
+        for (const p of body.caminhos.slice(0, 6)) if (typeof p === "string" && p.startsWith("/") && !p.includes("oauth")) res[p] = await cru(p);
+        return json(res);
+      }
+      const h = await cru(`/highlights/MLB/category/${cat}`);
+      // deno-lint-ignore no-explicit-any
+      let content: any[] = [];
+      try { content = JSON.parse(h.corpo.length < 1500 ? h.corpo : (await (await fetch(API + `/highlights/MLB/category/${cat}`, { headers: { Authorization: `Bearer ${t}` } })).text())).content || []; } catch (_) { /* */ }
+      const it = content.find((c) => c.type === "ITEM"), pr = content.find((c) => c.type !== "ITEM");
+      return json({
+        highlights: { status: h.status, tipos: content.reduce((a, c) => ({ ...a, [c.type]: (a[c.type] || 0) + 1 }), {} as Record<string, number>), amostra: content.slice(0, 3) },
+        item: it ? await cru(`/items?ids=${it.id}&attributes=id,title,price,original_price,status`) : null,
+        sale_price: it ? await cru(`/items/${it.id}/sale_price`) : null,
+        produto: pr ? await cru(`/products/${pr.id}`) : null,
+        produto_itens: pr ? await cru(`/products/${pr.id}/items`) : null,
+      });
+    }
     if (body.acao === "desconectar") {
       await db.rpc("achados_ml_desconectar", { p_dono: email });
       return json({ ok: true });
