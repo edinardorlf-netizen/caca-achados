@@ -281,7 +281,7 @@ async function carregarML(){
   $("#ml-status").innerHTML = s.conectado ? `<span class="ponto on"></span> Conectado${s.nickname?` como <b>${esc(s.nickname)}</b>`:""}`
     : s.tem_app && s.tem_secret ? `<span class="ponto"></span> App salvo. Falta autorizar o acesso no Mercado Livre.` : `<span class="ponto"></span> Ainda não conectado`;
   $("#ml-sinc").textContent = s.sinc_em ? `Última busca: ${new Date(s.sinc_em).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})} · ${s.sinc_msg||""}` : (s.sinc_msg||"");
-  $("#ml-acoes").innerHTML = s.conectado ? `<button class="btn ghost sm" id="ml-desc" type="button">Desconectar</button>` : (s.tem_app && s.tem_secret ? `<button class="btn amarelo" id="ml-con" type="button">Conectar Mercado Livre</button>` : "");
+  $("#ml-acoes").innerHTML = s.conectado ? `<button class="btn ghost sm" id="ml-trocar" type="button">Trocar Secret Key</button><button class="btn ghost sm" id="ml-desc" type="button">Desconectar</button>` : (s.tem_app && s.tem_secret ? `<button class="btn amarelo" id="ml-con" type="button">Conectar Mercado Livre</button>` : "");
   $("#ml-id").value = cfgML.ml_client_id || "";
   $("#ml-app").hidden = !!s.conectado;
   $("#ml-min").value = cfgML.desconto_min ?? 20;
@@ -351,6 +351,7 @@ $("#ml-acoes").addEventListener("click", async (e)=>{
     e.target.disabled=true;
     try{ const { url } = await chamarML("conectar"); location.href = url; }catch(err){ toast(errMsg(err)); e.target.disabled=false; }
   }
+  if(e.target.id==="ml-trocar"){ $("#ml-app").hidden=false; $("#ml-sec").focus(); return; }
   if(e.target.id==="ml-desc"){
     try{ await chamarML("desconectar"); catsML=null; toast("Mercado Livre desconectado"); carregarML(); }catch(err){ toast(errMsg(err)); }
   }
@@ -363,7 +364,8 @@ $("#f-mlapp").addEventListener("submit", async (e)=>{
   const { error } = await sb.rpc("achados_salvar_ml", { p_client_id:id, p_secret: sec || null });
   $("#ml-salvar").disabled=false;
   if(error){ $("#ml-msg").textContent = error.message; return; }
-  $("#ml-sec").value=""; $("#ml-msg").textContent="Salvo. Agora toque em “Conectar Mercado Livre” e autorize."; carregarML();
+  const jaConectado = !$("#ml-acoes #ml-desc") ? false : true;
+  $("#ml-sec").value=""; $("#ml-msg").textContent = jaConectado ? "Secret Key trocada. A conexão continua valendo." : "Salvo. Agora toque em “Conectar Mercado Livre” e autorize."; carregarML();
 });
 $("#ml-salvar-busca").onclick = async () => {
   const sel = [...document.querySelectorAll('#ml-cats .chip[aria-pressed="true"]')];
