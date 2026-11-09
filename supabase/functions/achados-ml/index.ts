@@ -175,17 +175,21 @@ async function detalharProdutos(ids: string[], token: string, pos: Map<string, n
 }
 
 async function buscar(dono: string, deadline: number) {
-  const { data: cfg } = await db.from("achados_config").select("ml_conectado,ml_categorias,ml_categorias_nomes,desconto_min").eq("dono", dono).single();
+  const { data: cfg } = await db.from("achados_config").select("ml_conectado,ml_categorias,ml_categorias_nomes,desconto_min,ml_cat_cursor").eq("dono", dono).single();
   if (!cfg?.ml_conectado) throw new Error("O Mercado Livre não está conectado.");
-  const cats: string[] = cfg.ml_categorias || [];
-  if (!cats.length) throw new Error("Escolha pelo menos uma categoria em Ajustes.");
+  const todas: string[] = cfg.ml_categorias || [];
+  if (!todas.length) throw new Error("Escolha pelo menos uma categoria em Ajustes.");
+  // Rodízio: cada busca começa de onde a anterior parou, para todas as categorias serem visitadas
+  const ini = Math.max(0, Number(cfg.ml_cat_cursor || 0)) % todas.length;
+  const cats = [...todas.slice(ini), ...todas.slice(0, ini)];
+  let feitas = 0;
   const token = await tokenDe(dono);
   const min = Number(cfg.desconto_min || 0);
   let vistos = 0, achados = 0, novos = 0, itensAvulsos = 0;
   const avisos: string[] = [];
   multigetBloqueado = false; itemBloqueado = false;
   for (const cat of cats) {
-    if (Date.now() > deadline) { avisos.push("O tempo acabou antes de todas as categorias; o resto entra na próxima busca."); break; }
+    if (Date.now() > deadline) break;
     try {
       const h = await ml(`/highlights/MLB/category/${cat}`, token);
       // deno-lint-ignore no-explicit-any
@@ -217,11 +221,14 @@ async function buscar(dono: string, deadline: number) {
     } catch (e) {
       avisos.push(`${(cfg.ml_categorias_nomes || {})[cat] || cat}: ${(e as Error).message}`);
     }
+    feitas++;
   }
+  await db.from("achados_config").update({ ml_cat_cursor: (ini + feitas) % todas.length }).eq("dono", dono);
+  const rodizio = feitas < todas.length ? ` ${feitas} de ${todas.length} categorias nesta busca; as outras entram na próxima.` : "";
   // Monta o link de afiliado nas ofertas novas (se o modelo do link já foi configurado)
   const { data: nAfil } = await db.rpc("achados_aplicar_afiliado", { p_dono: dono });
   const nota = itemBloqueado && itensAvulsos ? ` ${itensAvulsos} anúncios avulsos ficaram de fora (o Mercado Livre não libera mais esses dados para apps de terceiros); os produtos de catálogo entraram normalmente.` : "";
-  const msg = `${vistos} mais vendidos conferidos, ${achados} com desconto de ${min}% ou mais (${novos} novos).${nAfil ? ` ${nAfil} com link de afiliado montado.` : ""}${nota}${avisos.length ? " " + avisos.join(" ") : ""}`;
+  const msg = `${vistos} mais vendidos conferidos, ${achados} com desconto de ${min}% ou mais (${novos} novos).${nAfil ? ` ${nAfil} com link de afiliado montado.` : ""}${rodizio}${nota}${avisos.length ? " " + avisos.join(" ") : ""}`;
   await db.from("achados_config").update({ ml_sinc_em: new Date().toISOString(), ml_sinc_ok: avisos.length === 0, ml_sinc_msg: msg.slice(0, 600) }).eq("dono", dono);
   return { vistos, achados, novos, avisos, msg };
 }
@@ -376,7 +383,7 @@ async function callback(url: URL) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const url = new URL(req.url);
-  const deadline = Date.now() + 120_000;
+  const deadline = Date.now() + 110_000;
   try {
     if (req.method === "GET" && url.searchParams.has("code")) return await callback(url);
     if (req.method === "GET" && url.searchParams.has("error")) return new Response(null, { status: 302, headers: { Location: `${APP_URL}#ml-recusado` } });
