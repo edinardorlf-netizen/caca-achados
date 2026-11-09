@@ -91,14 +91,43 @@ type Achado = { id: string; titulo: string; preco_por: number; preco_de: number 
 // deno-lint-ignore no-explicit-any
 const imgHttps = (u?: string | null) => (u ? String(u).replace(/^http:/, "https:").replace(/-I\.jpg$/, "-O.jpg") : null);
 
+// O Mercado Livre desativou a consulta em grupo de anúncios (/items?ids=) para apps de terceiros
+// ("ResourceDeprecated"). Quando isso acontece, tentamos um a um (/items/{id}); se também for
+// recusado, os anúncios avulsos ficam de fora e a categoria segue só com os produtos de catálogo.
+let multigetBloqueado = false;
+let itemBloqueado = false;
+const recusado = (e: unknown) => /\b403\b|deprecated|forbidden/i.test((e as Error)?.message || "");
+
+// deno-lint-ignore no-explicit-any
+async function buscarItens(lote: string[], token: string): Promise<any[]> {
+  const attrs = "attributes=id,title,price,original_price,permalink,thumbnail,secure_thumbnail,status";
+  if (!multigetBloqueado) {
+    try {
+      // deno-lint-ignore no-explicit-any
+      const res: any[] = (await ml(`/items?ids=${lote.join(",")}&${attrs}`, token)) || [];
+      return res.map((r) => (r && r.code === 200 ? r.body : null));
+    } catch (e) {
+      if (!recusado(e)) throw e;
+      multigetBloqueado = true;
+    }
+  }
+  if (itemBloqueado) return [];
+  // deno-lint-ignore no-explicit-any
+  const out: any[] = [];
+  for (const id of lote) {
+    try { out.push(await ml(`/items/${id}?${attrs}`, token)); }
+    catch (e) { if (recusado(e)) { itemBloqueado = true; break; } }
+  }
+  return out;
+}
+
 async function detalharItens(ids: string[], token: string, pos: Map<string, number>): Promise<Achado[]> {
   const out: Achado[] = [];
   for (let i = 0; i < ids.length; i += 20) {
     const lote = ids.slice(i, i + 20);
-    // deno-lint-ignore no-explicit-any
-    const res: any[] = (await ml(`/items?ids=${lote.join(",")}&attributes=id,title,price,original_price,permalink,thumbnail,secure_thumbnail,status`, token)) || [];
-    for (const r of res) {
-      const b = r && r.code === 200 ? r.body : null;
+    const res = await buscarItens(lote, token);
+    if (!res.length && itemBloqueado) break;
+    for (const b of res) {
       if (!b || b.status !== "active") continue;
       let por = Number(b.price), de = b.original_price != null ? Number(b.original_price) : null;
       // O preço de promoção às vezes só aparece no "sale_price" do item.
@@ -152,8 +181,9 @@ async function buscar(dono: string, deadline: number) {
   if (!cats.length) throw new Error("Escolha pelo menos uma categoria em Ajustes.");
   const token = await tokenDe(dono);
   const min = Number(cfg.desconto_min || 0);
-  let vistos = 0, achados = 0, novos = 0;
+  let vistos = 0, achados = 0, novos = 0, itensAvulsos = 0;
   const avisos: string[] = [];
+  multigetBloqueado = false; itemBloqueado = false;
   for (const cat of cats) {
     if (Date.now() > deadline) { avisos.push("O tempo acabou antes de todas as categorias; o resto entra na próxima busca."); break; }
     try {
@@ -163,7 +193,11 @@ async function buscar(dono: string, deadline: number) {
       const pos = new Map<string, number>(content.map((c) => [String(c.id), Number(c.position) || 0]));
       const itens = content.filter((c) => c.type === "ITEM").map((c) => String(c.id));
       const prods = content.filter((c) => c.type === "PRODUCT" || c.type === "USER_PRODUCT").map((c) => String(c.id)).slice(0, 20);
-      const lista = [...await detalharItens(itens, token, pos), ...await detalharProdutos(prods, token, pos)];
+      let doItens: Achado[] = [];
+      try { doItens = await detalharItens(itens, token, pos); }
+      catch (e) { avisos.push(`${(cfg.ml_categorias_nomes || {})[cat] || cat}: anúncios avulsos indisponíveis (${(e as Error).message.slice(0, 80)})`); }
+      const lista = [...doItens, ...await detalharProdutos(prods, token, pos)];
+      if (itens.length) itensAvulsos += itens.length;
       vistos += lista.length;
       const bons = lista.filter((a) => a.preco_de && a.preco_de > a.preco_por && Math.round((1 - a.preco_por / a.preco_de) * 100) >= min);
       achados += bons.length;
@@ -186,7 +220,8 @@ async function buscar(dono: string, deadline: number) {
   }
   // Monta o link de afiliado nas ofertas novas (se o modelo do link já foi configurado)
   const { data: nAfil } = await db.rpc("achados_aplicar_afiliado", { p_dono: dono });
-  const msg = `${vistos} mais vendidos conferidos, ${achados} com desconto de ${min}% ou mais (${novos} novos).${nAfil ? ` ${nAfil} com link de afiliado montado.` : ""}${avisos.length ? " " + avisos.join(" ") : ""}`;
+  const nota = itemBloqueado && itensAvulsos ? ` ${itensAvulsos} anúncios avulsos ficaram de fora (o Mercado Livre não libera mais esses dados para apps de terceiros); os produtos de catálogo entraram normalmente.` : "";
+  const msg = `${vistos} mais vendidos conferidos, ${achados} com desconto de ${min}% ou mais (${novos} novos).${nAfil ? ` ${nAfil} com link de afiliado montado.` : ""}${nota}${avisos.length ? " " + avisos.join(" ") : ""}`;
   await db.from("achados_config").update({ ml_sinc_em: new Date().toISOString(), ml_sinc_ok: avisos.length === 0, ml_sinc_msg: msg.slice(0, 600) }).eq("dono", dono);
   return { vistos, achados, novos, avisos, msg };
 }
