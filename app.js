@@ -355,6 +355,7 @@ async function abrirStory(){
   try{ r = await chamarML("gerar", { id: o.id }, FN_ST); }
   catch(err){ $("#st-msg").textContent = errMsg(err); return; }
   stAtual = { id: o.id, ...r };
+  sb.from("achados_ofertas").update({ story_gerado_em: new Date().toISOString() }).eq("id", o.id).then(()=>{}); // entra na Vitrine pelo código
   $("#st-img-link").src = r.arte_link; $("#st-img-bio").src = r.arte_bio;
   $("#st-cod").textContent = `Na Vitrine, o código #${r.num} leva direto a este achado.`;
   $("#st-msg").textContent = o.storyEm || o.igPostadoEm ? `Este achado já foi para o Story${o.igPostadoEm?` (automático em ${dataHora(o.igPostadoEm)})`:""}${o.storyEm?` (à mão em ${dataHora(o.storyEm)})`:""}.` : "Pronto! Escolha a arte.";
