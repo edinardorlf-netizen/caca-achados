@@ -275,7 +275,6 @@ function postTelegram(o: any) {
     o.nota ? `📌 ${escHtml(o.nota)}` : null, "",
     `👉 <a href="${escHtml(o.link)}">Pegar a oferta</a>`, "",
     "⚠️ Preço e estoque podem mudar a qualquer momento.",
-    "🔗 Link de afiliado: posso ganhar comissão, sem custo extra para você.",
     "— O Cara dos Achados",
   ];
   return linhas.filter((x) => x !== null).join("\n");
