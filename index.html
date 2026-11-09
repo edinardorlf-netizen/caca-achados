@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icone-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..900&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="estilo.css?v=3">
+<link rel="stylesheet" href="estilo.css?v=4">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)} body{margin:0} img{max-width:100%} [hidden]{display:none!important}</style>
 </head>
 <body>
@@ -60,6 +60,12 @@
 
   <!-- FILA -->
   <section id="v-fila">
+    <div class="wa-faixa" id="wa-faixa" hidden>
+      <div class="wa-thumb" id="wa-thumb"></div>
+      <div class="wa-info"><span class="wa-rot">Próxima para o WhatsApp</span><b id="wa-tit"></b><span id="wa-preco"></span></div>
+      <div class="wa-acoes"><a class="btn wa-btn" id="wa-enviar" target="_blank" rel="noopener">Enviar no WhatsApp</a><button class="btn ghost sm" id="wa-pular" type="button">Pular</button></div>
+      <span class="hint wa-cont" id="wa-cont"></span>
+    </div>
     <div class="layout">
       <div class="card">
         <div class="row" style="justify-content:space-between"><h2>Fila de ofertas</h2>
@@ -228,6 +234,32 @@
     </div>
     <div class="layout" style="margin-top:14px">
       <div class="card">
+        <h2>Hora do WhatsApp</h2>
+        <p class="hint" id="wa-status">Carregando…</p>
+        <p class="hint">O WhatsApp não deixa nenhum app postar em grupos sozinho sem risco de banir o número. Então, nos horários marcados, o seu bot do Telegram te manda <b>em particular</b> a oferta da vez com o botão <b>Enviar no WhatsApp</b>: o texto já abre pronto, você escolhe o grupo ou canal e envia. Usa a mesma conversa vinculada no cartão <b>Aviso de achadão</b>.</p>
+        <div class="fgrid" style="margin-top:8px">
+          <label class="f" for="wa-n">Ofertas por dia<input class="in" id="wa-n" type="number" min="1" max="30"></label>
+          <label class="f" for="wa-ini">Das (hora)<input class="in" id="wa-ini" type="number" min="0" max="23"></label>
+          <label class="f" for="wa-fim">Até (hora)<input class="in" id="wa-fim" type="number" min="1" max="24"></label>
+          <label class="f" for="wa-min">Desconto mínimo (%)<input class="in" id="wa-min" type="number" min="0" max="95" step="5"></label>
+        </div>
+        <label class="row" style="font-size:14px;gap:6px;margin-top:8px"><input type="checkbox" id="wa-ativo"> Hora do WhatsApp ligada</label>
+        <div class="row"><button class="btn amarelo" id="wa-salvar" type="button">Salvar</button><button class="btn ghost" id="wa-agora" type="button">Mandar uma agora</button></div>
+        <p class="hint" id="wa-msg"></p>
+      </div>
+      <div class="card">
+        <h2>Dicas para não perder o número</h2>
+        <ol class="passos">
+          <li>Use o <b>Canal do WhatsApp</b> como principal e uma <b>Comunidade</b> com grupo de avisos (só admins postam).</li>
+          <li>Coloque os seus outros números como <b>administradores</b>: se um cair, o canal e os grupos continuam.</li>
+          <li>Números novos: 2 a 3 semanas de uso normal antes de postar muito. Comece com poucas ofertas e vá subindo.</li>
+          <li>Nunca adicione ninguém sem pedir; divulgue o link de convite pela Vitrine. Denúncia de spam é o que mais derruba conta.</li>
+          <li>Não use WhatsApp modificado nem extensões de disparo.</li>
+        </ol>
+      </div>
+    </div>
+    <div class="layout" style="margin-top:14px">
+      <div class="card">
         <h2>Shopee</h2>
         <div class="status-ml" id="shp-status"><span class="ponto"></span> Carregando…</div>
         <p class="hint" id="shp-sinc"></p>
@@ -331,6 +363,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=2"></script>
-<script src="app.js?v=10"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>

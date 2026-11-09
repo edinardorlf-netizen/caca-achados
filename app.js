@@ -53,7 +53,7 @@ const errMsg = (e) => (e && (e.message || e.error_description || e.erro)) || Str
 // Banco ↔ tela
 const daLinha = (r) => ({ id:r.id, titulo:r.titulo, marketplace:r.marketplace, categoria:r.categoria, link:r.link, linkProduto:r.link_produto,
   precoDe: r.preco_de!=null?Number(r.preco_de):null, precoPor: r.preco_por!=null?Number(r.preco_por):null, cupom:r.cupom, comissao: r.comissao!=null?Number(r.comissao):null,
-  validade:r.validade, imagem:r.imagem, nota:r.nota, status:r.status, canais:r.canais||[], exemplo:r.exemplo, fonte:r.fonte, linkAuto:r.link_auto, mlPosicao:r.ml_posicao, criadoEm:r.criado_em, postadoEm:r.postado_em, num:r.num, storyEm:r.story_em, igPostadoEm:r.ig_postado_em });
+  validade:r.validade, imagem:r.imagem, nota:r.nota, status:r.status, canais:r.canais||[], exemplo:r.exemplo, fonte:r.fonte, linkAuto:r.link_auto, mlPosicao:r.ml_posicao, criadoEm:r.criado_em, postadoEm:r.postado_em, num:r.num, storyEm:r.story_em, igPostadoEm:r.ig_postado_em, waEm:r.wa_avisado_em });
 const paraLinha = (o) => ({ titulo:o.titulo, marketplace:o.marketplace, categoria:o.categoria||null, link:o.link||null, preco_de:o.precoDe, preco_por:o.precoPor,
   cupom:o.cupom||null, comissao:o.comissao, validade:o.validade||null, imagem:o.imagem||null, nota:o.nota||null });
 
@@ -134,7 +134,7 @@ function render(){
         <div class="score">Nota ${score(o)}${o.categoria?` · ${esc(o.categoria)}`:""}</div></div>
       <div class="preco">${o.precoDe&&d?`<s>${brl(o.precoDe)}</s>`:""}<strong>${brl(o.precoPor)||"—"}</strong>${d?`<span class="off">-${d}%</span>`:""}</div>
     </div>`; }).join("");
-  renderGerador(); renderPostadas();
+  renderGerador(); renderPostadas(); renderFaixaWA();
 }
 function renderGerador(){
   const o = ofertas.find(x=>x.id===selId);
@@ -166,6 +166,37 @@ function renderPostadas(){
   $("#hist").innerHTML = p.length ? p.map(o=>`<tr><td>${o.postadoEm?new Date(o.postadoEm).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"—"}</td><td>${esc(o.titulo)}</td><td>${MKT[o.marketplace]?.nome||""}</td><td>${(o.canais||[]).map(c=>({whatsapp:"WhatsApp",telegram:"Telegram",social:"TikTok/Insta",live:"Live"})[c]||c).join(", ")||"—"}</td><td class="n">${brl(o.precoPor)}</td><td class="n">${desc(o)!=null?desc(o)+"%":"—"}</td></tr>`).join("")
     : `<tr><td colspan="6" class="hint" style="padding:16px">Quando você marcar uma oferta como postada, ela aparece aqui.</td></tr>`;
 }
+
+// ---------- Próxima para o WhatsApp (botão direto no app) ----------
+let waCfg = { min: 30 }, waPulados = new Set();
+const textoWA = (o) => { const ant = $("#aviso-afiliado").checked; $("#aviso-afiliado").checked = false; const t = gerarPost(o, "whatsapp"); $("#aviso-afiliado").checked = ant; return t; };
+function filaWA(){
+  return ofertas.filter(o => o.link && !o.exemplo && !vencida(o) && ["nova","aprovada","postada"].includes(o.status) && !o.waEm && !(o.canais||[]).includes("whatsapp") && (desc(o)||0) >= waCfg.min && !waPulados.has(o.id))
+    .sort((a,b)=> (b.status==="aprovada")-(a.status==="aprovada") || score(b)-score(a));
+}
+function renderFaixaWA(){
+  const fila = filaWA(), o = fila[0];
+  $("#wa-faixa").hidden = !o; if(!o) return;
+  const d = desc(o), m = MKT[o.marketplace]||MKT.outro;
+  $("#wa-thumb").innerHTML = o.imagem ? `<img src="${esc(o.imagem)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : `<b>${m.nome}</b>`;
+  $("#wa-tit").textContent = `#${o.num||""} ${o.titulo}`;
+  $("#wa-preco").innerHTML = `${o.precoDe&&d?`<s>${brl(o.precoDe)}</s> `:""}<strong>${brl(o.precoPor)}</strong>${d?` · ${d}% OFF`:""} · ${m.nome}`;
+  $("#wa-enviar").href = "https://wa.me/?text=" + encodeURIComponent(textoWA(o));
+  $("#wa-enviar").dataset.id = o.id;
+  $("#wa-cont").textContent = fila.length > 1 ? `+${fila.length-1} na fila do WhatsApp` : "última da fila do WhatsApp";
+}
+async function marcarWA(id){
+  const o = ofertas.find(x=>x.id===id); if(!o) return;
+  const canais = [...new Set([...(o.canais||[]), "whatsapp"])], agora = new Date().toISOString();
+  o.waEm = agora; o.canais = canais; renderFaixaWA();
+  const { error } = await sb.from("achados_ofertas").update({ wa_avisado_em: agora, canais }).eq("id", id);
+  if(error) toast("Não consegui anotar: "+error.message); else toast("Anotado como enviado no WhatsApp");
+}
+$("#wa-enviar").addEventListener("click", (e)=>{ const id = e.currentTarget.dataset.id; setTimeout(()=>marcarWA(id), 300); });
+$("#wa-pular").onclick = () => { const o = filaWA()[0]; if(o){ waPulados.add(o.id); renderFaixaWA(); } };
+// O botão "Abrir no WhatsApp" do gerador também anota a oferta como enviada
+$("#btn-wa").addEventListener("click", ()=>{ if(selId) setTimeout(()=>marcarWA(selId), 300); });
+async function carregarCfgWA(){ try{ const { data } = await sb.from("achados_config").select("wa_desconto_min").maybeSingle(); waCfg.min = data?.wa_desconto_min ?? 30; renderFaixaWA(); }catch{} }
 
 // ---------- Dados ----------
 async function carregarOfertas(){
@@ -315,6 +346,28 @@ $("#ig-salvar-agenda").onclick = async () => {
   toast(patch.ig_ativo ? `Story automático ligado: 1 a cada ${patch.ig_intervalo_min} min, das ${patch.ig_hora_ini}h às ${patch.ig_hora_fim}h` : "Agenda salva (automático desligado)");
   carregarML();
 };
+function renderWhatsApp(){
+  const n = cfgML.wa_posts_dia ?? 12, ini = cfgML.wa_hora_ini ?? 6, fim = cfgML.wa_hora_fim ?? 22;
+  const cada = Math.max(20, Math.floor((fim-ini)*60/n));
+  $("#wa-status").innerHTML = !cfgML.alerta_chat_id ? `<span class="ponto"></span> Falta vincular a sua conversa com o bot (cartão Aviso de achadão).`
+    : `<span class="ponto ${cfgML.wa_ativo?"on":""}"></span> ${cfgML.wa_ativo?`<b>Ligada</b>: ${n} ofertas por dia, das ${ini}h às ${fim}h (uma a cada ${cada>=60?`${Math.floor(cada/60)}h${cada%60?String(cada%60).padStart(2,"0"):""}`:`${cada} min`})`:"Desligada"}`;
+  $("#wa-n").value = n; $("#wa-ini").value = ini; $("#wa-fim").value = fim; $("#wa-min").value = cfgML.wa_desconto_min ?? 30; $("#wa-ativo").checked = cfgML.wa_ativo !== false;
+  $("#wa-msg").textContent = cfgML.wa_msg || "";
+}
+$("#wa-salvar").onclick = async () => {
+  const patch = { wa_posts_dia: limitar($("#wa-n").value,1,30,12), wa_hora_ini: limitar($("#wa-ini").value,0,23,6), wa_hora_fim: limitar($("#wa-fim").value,1,24,22),
+    wa_desconto_min: limitar($("#wa-min").value,0,95,30), wa_ativo: $("#wa-ativo").checked };
+  if(patch.wa_hora_fim <= patch.wa_hora_ini) return toast("A hora final precisa ser depois da inicial.");
+  const { error } = await sb.from("achados_config").update(patch).eq("dono", await souDono());
+  if(error) return toast("Não consegui salvar: "+error.message);
+  toast(patch.wa_ativo ? `Hora do WhatsApp: ${patch.wa_posts_dia} ofertas por dia, das ${patch.wa_hora_ini}h às ${patch.wa_hora_fim}h` : "Hora do WhatsApp desligada"); carregarML();
+};
+$("#wa-agora").onclick = async () => {
+  const b=$("#wa-agora"); b.disabled=true; $("#wa-msg").textContent="Mandando…";
+  try{ const r = await chamarML("wa_agora", {}, FN_ST); $("#wa-msg").textContent = `Mandei o achado #${r.num} no seu Telegram.`; await carregarOfertas(); }
+  catch(err){ $("#wa-msg").textContent = errMsg(err); }
+  b.disabled=false;
+};
 $("#al-vincular").onclick = async () => {
   const b=$("#al-vincular"); b.disabled=true; $("#al-msg").textContent="Procurando a sua conversa com o bot…";
   try{ const r = await chamarML("alerta_vincular", {}, FN_ST); toast(`Vinculado${r.nome?`: ${r.nome}`:""}. Confira a mensagem do bot no Telegram.`); }
@@ -398,7 +451,7 @@ async function chamarML(acao, extra={}, url=FN){
 }
 async function carregarML(){
   const [st, cf, ts, ss, is] = await Promise.all([ sb.rpc("achados_ml_status"),
-    sb.from("achados_config").select("ml_client_id,ml_categorias,ml_categorias_nomes,desconto_min,ml_afiliado_query,ml_afiliado_em,tg_ativo,tg_intervalo_min,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post,tg_msg,ig_ativo,ig_intervalo_min,ig_hora_ini,ig_hora_fim,ig_desconto_min,ig_ultimo_post,ig_msg,ig_usuario,alerta_ativo,alerta_min,alerta_chat_id,alerta_msg,shp_app_id,shp_ativo,shp_palavras,shp_top,shp_desconto_min,shp_comissao_min,shp_sinc_em,shp_sinc_ok,shp_sinc_msg,amz_tag,vit_slug,vit_telegram,vit_whatsapp,vit_instagram,vit_tiktok").maybeSingle(),
+    sb.from("achados_config").select("ml_client_id,ml_categorias,ml_categorias_nomes,desconto_min,ml_afiliado_query,ml_afiliado_em,tg_ativo,tg_intervalo_min,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post,tg_msg,ig_ativo,ig_intervalo_min,ig_hora_ini,ig_hora_fim,ig_desconto_min,ig_ultimo_post,ig_msg,ig_usuario,alerta_ativo,alerta_min,alerta_chat_id,alerta_msg,wa_ativo,wa_posts_dia,wa_hora_ini,wa_hora_fim,wa_desconto_min,wa_ultimo_aviso,wa_msg,shp_app_id,shp_ativo,shp_palavras,shp_top,shp_desconto_min,shp_comissao_min,shp_sinc_em,shp_sinc_ok,shp_sinc_msg,amz_tag,vit_slug,vit_telegram,vit_whatsapp,vit_instagram,vit_tiktok").maybeSingle(),
     sb.rpc("achados_tg_status"), sb.rpc("achados_shp_status"), sb.rpc("achados_ig_status") ]);
   const s = (st.data||[])[0] || {};
   cfgML = cf.data || { ml_categorias:[], ml_categorias_nomes:{}, desconto_min:20 };
@@ -411,7 +464,7 @@ async function carregarML(){
   $("#ml-min").value = cfgML.desconto_min ?? 20;
   if(s.conectado && !catsML){ try{ catsML = (await chamarML("categorias")).categorias || []; }catch(e){ $("#ml-cats").innerHTML = `<span class="erro">${esc(errMsg(e))}</span>`; } }
   renderCats(s.conectado);
-  renderAfiliado(); renderTelegram((ts.data||[])[0] || {}); renderShopee((ss.data||[])[0] || {}); renderInstagram((is.data||[])[0] || {}); renderAlerta();
+  renderAfiliado(); renderTelegram((ts.data||[])[0] || {}); renderShopee((ss.data||[])[0] || {}); renderInstagram((is.data||[])[0] || {}); renderAlerta(); renderWhatsApp();
   amzTag = cfgML.amz_tag || null; $("#amz-tag").value = amzTag || "";
   const vurl = new URL("vitrine.html", location.href); if(cfgML.vit_slug && cfgML.vit_slug!=="ocaradosachados") vurl.searchParams.set("c", cfgML.vit_slug);
   $("#vit-url").value = vurl.toString(); $("#vit-abrir").href = vurl.toString();
@@ -625,7 +678,7 @@ async function entrar(session){
   }
   mostrar(aba);
   try{ const { data } = await sb.from("achados_config").select("amz_tag").maybeSingle(); amzTag = data?.amz_tag || null; }catch{}
-  await carregarOfertas(); ouvir();
+  await carregarOfertas(); ouvir(); carregarCfgWA();
 }
 let ultimoUsuario = undefined;
 sb.auth.onAuthStateChange((_ev, session) => {

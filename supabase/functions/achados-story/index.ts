@@ -8,6 +8,7 @@
 //   POST { acao: "ig_postar", id }        → publica o Story agora pela API
 //   POST { acao: "alerta_vincular" }      → acha a sua conversa com o bot do Telegram para receber os avisos
 //   POST { acao: "alerta_testar" }        → manda um aviso de teste
+//   POST { acao: "wa_agora" }             → manda já a próxima oferta da Hora do WhatsApp
 // Cron (x-cron-key):
 //   GET ?tarefa=postar → Story automático (link na bio) + aviso de achadão (para postar com figurinha)
 //
@@ -220,6 +221,80 @@ async function alertasAgendados() {
   return res;
 }
 
+// ---------- Hora do WhatsApp ----------
+// O WhatsApp não tem jeito oficial de postar em grupos sozinho. Então, nos horários marcados, o bot
+// te manda (no particular do Telegram) a oferta da vez com um botão que abre o WhatsApp com o texto
+// pronto: você só escolhe o grupo/canal e envia.
+const LOJA_WA: Record<string, string> = { shopee: "na Shopee", meli: "no Mercado Livre", amazon: "na Amazon", tiktok: "no TikTok Shop" };
+function textoWhatsApp(o: Oferta) {
+  const d = descontoDe(o);
+  return [
+    `${d && d >= 40 ? "🔥 ACHADÃO" : "🛒 ACHADO DO DIA"} ${LOJA_WA[o.marketplace] || ""}`.trim(), "",
+    `*${String(o.titulo).slice(0, 160)}*`, "",
+    (o.preco_de && d ? `~De ${brl(Number(o.preco_de))}~\n` : "") + `✅ *Por ${brl(Number(o.preco_por))}*${d ? ` (${d}% OFF)` : ""}`,
+    o.cupom ? `🎟️ Cupom: *${o.cupom}*` : null,
+    o.nota ? `📌 ${o.nota}` : null, "",
+    `👉 ${o.link}`, "",
+    "⚠️ Preço e estoque podem mudar a qualquer momento.",
+    "_O Cara dos Achados_",
+  ].filter((x) => x !== null).join("\n");
+}
+
+async function proximaParaWhatsApp(dono: string, minDesc: number) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const { data } = await db.from("achados_ofertas").select("*").eq("dono", dono).not("link", "is", null).eq("exemplo", false)
+    .is("wa_avisado_em", null).in("status", ["nova", "aprovada", "postada"]).or(`validade.is.null,validade.gte.${hoje}`).limit(300);
+  const lst = (data || []).filter((o: Oferta) => (descontoDe(o) || 0) >= minDesc && !(o.canais || []).includes("whatsapp"));
+  lst.sort((a: Oferta, b: Oferta) => (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
+  return lst[0] || null;
+}
+
+async function enviarHoraWhatsApp(dono: string, chat: string, o: Oferta, n?: string) {
+  const token = await tgToken(dono);
+  const txt = textoWhatsApp(o);
+  const d = descontoDe(o);
+  const legenda = [
+    `🟢 <b>Hora do WhatsApp</b>${n ? ` (${n})` : ""} · achado #${o.num}${d ? ` · ${d}% OFF` : ""}`, "",
+    `<b>${escHtml(String(o.titulo).slice(0, 140))}</b>`,
+    `${o.preco_de && d ? `De ${brl(Number(o.preco_de))} por ` : ""}<b>${brl(Number(o.preco_por))}</b>`, "",
+    "Toque em <b>Enviar no WhatsApp</b>, escolha o grupo ou canal e envie. Se preferir, copie o texto abaixo.",
+  ].join("\n");
+  const teclado = { inline_keyboard: [[{ text: "📲 Enviar no WhatsApp", url: `https://wa.me/?text=${encodeURIComponent(txt)}` }]] };
+  try {
+    if (o.imagem) await tg(token, "sendPhoto", { chat_id: chat, photo: o.imagem, caption: legenda, parse_mode: "HTML", reply_markup: teclado });
+    else throw new Error("sem foto");
+  } catch (_) {
+    await tg(token, "sendMessage", { chat_id: chat, text: legenda, parse_mode: "HTML", reply_markup: teclado });
+  }
+  await tg(token, "sendMessage", { chat_id: chat, text: `<pre>${escHtml(txt)}</pre>`, parse_mode: "HTML", link_preview_options: { is_disabled: true } });
+  const agora = new Date().toISOString();
+  const canais = [...new Set([...(o.canais || []), "whatsapp"])];
+  await db.from("achados_ofertas").update({ wa_avisado_em: agora, canais }).eq("id", o.id);
+  await db.from("achados_config").update({ wa_ultimo_aviso: agora, wa_msg: `Último aviso: #${o.num} ${String(o.titulo).slice(0, 60)} (${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })})` }).eq("dono", dono);
+}
+
+async function whatsappAgendado() {
+  const { data: donos } = await db.from("achados_config").select("dono,alerta_chat_id,wa_posts_dia,wa_hora_ini,wa_hora_fim,wa_desconto_min,wa_ultimo_aviso").eq("wa_ativo", true).not("alerta_chat_id", "is", null);
+  const res: Record<string, unknown> = {};
+  const h = horaSP();
+  for (const c of donos || []) {
+    if (h < c.wa_hora_ini || h >= c.wa_hora_fim) { res[c.dono] = "fora do horário"; continue; }
+    // Espalha os avisos pela janela: 6 posts das 9h às 21h = um a cada 2h
+    const intervaloMin = Math.max(20, Math.floor(((c.wa_hora_fim - c.wa_hora_ini) * 60) / c.wa_posts_dia));
+    if (c.wa_ultimo_aviso && Date.now() - Date.parse(c.wa_ultimo_aviso) < (intervaloMin * 60 - 30) * 1000) { res[c.dono] = "aguardando intervalo"; continue; }
+    try {
+      const o = await proximaParaWhatsApp(c.dono, c.wa_desconto_min);
+      if (!o) { res[c.dono] = "nada para postar"; await db.from("achados_config").update({ wa_msg: "Nenhuma oferta nova com link e desconto suficiente para o WhatsApp." }).eq("dono", c.dono); continue; }
+      await enviarHoraWhatsApp(c.dono, c.alerta_chat_id, o);
+      res[c.dono] = `aviso #${o.num}`;
+    } catch (e) {
+      res[c.dono] = { erro: (e as Error).message };
+      await db.from("achados_config").update({ wa_msg: (e as Error).message.slice(0, 300) }).eq("dono", c.dono);
+    }
+  }
+  return res;
+}
+
 // ---------- Entrada ----------
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -231,7 +306,7 @@ Deno.serve(async (req) => {
       const { data: seg } = await db.from("segredos").select("valor").eq("chave", "cron").maybeSingle();
       if (!seg || chave !== seg.valor) return json({ erro: "não autorizado" }, 401);
       if (tarefa !== "postar") return json({ erro: "tarefa desconhecida" }, 400);
-      return json({ stories: await storyAgendado(), alertas: await alertasAgendados() });
+      return json({ stories: await storyAgendado(), alertas: await alertasAgendados(), whatsapp: await whatsappAgendado() });
     }
 
     const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
@@ -279,7 +354,7 @@ Deno.serve(async (req) => {
       const priv = ups.map((x) => x.message).filter((m) => m && m.chat && m.chat.type === "private").pop();
       if (!priv) throw new Error("Não achei sua conversa com o bot. Abra o bot no Telegram, toque em Iniciar (ou mande /start) e tente de novo.");
       await db.from("achados_config").update({ alerta_chat_id: String(priv.chat.id), alerta_desde: new Date().toISOString(), alerta_msg: `Avisos vão para ${priv.chat.first_name || "você"} no Telegram.` }).eq("dono", email);
-      await tg(t, "sendMessage", { chat_id: priv.chat.id, text: "✅ Pronto! Quando aparecer um achadão, eu te mando aqui a arte do Story e o link para a figurinha." });
+      await tg(t, "sendMessage", { chat_id: priv.chat.id, text: "✅ Pronto! Vou te mandar aqui as ofertas da Hora do WhatsApp (com o botão que abre o texto pronto) e os achadões para o Story." });
       return json({ ok: true, nome: priv.chat.first_name || null });
     }
     if (body.acao === "alerta_testar") {
@@ -291,6 +366,14 @@ Deno.serve(async (req) => {
       const o = (data || []).sort((a: Oferta, b: Oferta) => pontuacao(b) - pontuacao(a))[0];
       if (!o) throw new Error("Não há oferta com link na fila para o teste.");
       await enviarAlerta(email, cfg.alerta_chat_id, o);
+      return json({ ok: true, num: o.num });
+    }
+    if (body.acao === "wa_agora") {
+      const { data: cfg } = await db.from("achados_config").select("alerta_chat_id,wa_desconto_min").eq("dono", email).single();
+      if (!cfg?.alerta_chat_id) throw new Error("Vincule primeiro a sua conversa com o bot (cartão Aviso de achadão).");
+      const o = await proximaParaWhatsApp(email, cfg.wa_desconto_min);
+      if (!o) throw new Error("Não há oferta nova com link e desconto suficiente para o WhatsApp.");
+      await enviarHoraWhatsApp(email, cfg.alerta_chat_id, o, "pedido agora");
       return json({ ok: true, num: o.num });
     }
     return json({ erro: "Ação desconhecida." }, 400);
