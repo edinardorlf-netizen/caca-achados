@@ -82,7 +82,7 @@ main{max-width:1080px;margin:0 auto;padding:16px max(16px,env(safe-area-inset-le
 </header>
 <main>
   <div class="barra">
-    <input class="busca" id="busca" type="search" placeholder="Procurar achado (ex.: fone, air fryer)" aria-label="Procurar">
+    <input class="busca" id="busca" type="search" placeholder="Procurar achado ou código (ex.: fone, #127)" aria-label="Procurar">
   </div>
   <div class="chips" id="lojas" role="group" aria-label="Filtrar por loja"></div>
   <div class="grade" id="grade" aria-live="polite"><div class="vazio">Carregando os achados…</div></div>
@@ -113,14 +113,15 @@ function render(){
   const presentes = Object.keys(LOJAS).filter((k) => ofertas.some((o) => o.marketplace === k));
   $("#lojas").innerHTML = ["todas", ...presentes].map((k) => `<button class="chip" data-k="${k}" aria-pressed="${loja === k}">${k === "todas" ? "Todas" : LOJAS[k][0]}</button>`).join("");
   $("#lojas").hidden = presentes.length < 2;
-  const lst = ofertas.filter((o) => (loja === "todas" || o.marketplace === loja) && (!q || semAcento(o.titulo + " " + (o.categoria || "")).includes(q)));
-  if (!lst.length) { $("#grade").innerHTML = `<div class="vazio">${ofertas.length ? "Nada com esse nome agora. Tente outra palavra." : "Os achados de hoje estão chegando. Volte daqui a pouco ou siga os canais acima para não perder nada."}</div>`; return; }
+  const cod = (q.match(/^#?\s*(\d{1,7})$/) || [])[1];
+  const lst = ofertas.filter((o) => (loja === "todas" || o.marketplace === loja) && (!q || (cod ? String(o.num) === cod : semAcento(o.titulo + " " + (o.categoria || "")).includes(q))));
+  if (!lst.length) { $("#grade").innerHTML = `<div class="vazio">${ofertas.length ? (/^#?\s*\d+$/.test(q) ? "Esse achado já saiu do ar ou o código está diferente. Veja os outros abaixo limpando a busca." : "Nada com esse nome agora. Tente outra palavra.") : "Os achados de hoje estão chegando. Volte daqui a pouco ou siga os canais acima para não perder nada."}</div>`; return; }
   $("#grade").innerHTML = lst.map((o) => {
     const d = desc(o), l = LOJAS[o.marketplace] || LOJAS.outro;
     return `<a class="item" href="${esc(linkSeguro(o.link))}" target="_blank" rel="noopener sponsored" style="--c:${l[1]}">
       <div class="foto">${o.imagem ? `<img src="${esc(o.imagem)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : `<b>${l[0]}</b>`}</div>
       ${d ? `<span class="off">-${d}%</span>` : ""}
-      <div class="info"><span class="loja">${l[0]}</span><span class="tit">${esc(o.titulo)}</span>
+      <div class="info"><span class="loja">${l[0]}${o.num ? ` · #${o.num}` : ""}</span><span class="tit">${esc(o.titulo)}</span>
         ${o.cupom ? `<span class="cupom">Cupom: ${esc(o.cupom)}</span>` : ""}
         <div class="precos">${o.preco_de && d ? `<s>${brl(o.preco_de)}</s>` : ""}<strong>${brl(o.preco_por)}</strong></div></div>
       <span class="ver">Ver oferta</span></a>`;
@@ -136,9 +137,12 @@ async function carregar(){
   $("#canais").innerHTML = canais.map(([k, n, u, dest]) => `<a class="canal${dest ? " dest" : ""}" href="${esc(linkSeguro(u))}" target="_blank" rel="noopener">${ICONES[k]}${dest ? `Entrar no ${n}` : n}</a>`).join("");
   $("#canais").hidden = !canais.length;
   ofertas = data.ofertas || [];
+  const ancora = (location.hash.match(/^#a(\d{1,7})$/) || [])[1];
+  if (ancora) $("#busca").value = "#" + ancora;
   render();
 }
 $("#busca").addEventListener("input", render);
+addEventListener("hashchange", () => { const a = (location.hash.match(/^#a(\d{1,7})$/) || [])[1]; if (a) { $("#busca").value = "#" + a; render(); } });
 $("#lojas").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (b) { loja = b.dataset.k; render(); } });
 carregar();
 </script>

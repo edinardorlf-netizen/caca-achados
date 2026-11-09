@@ -113,3 +113,10 @@ textarea.post{min-height:260px;font-family:var(--f-body);font-size:14px}
 .ponto.on{background:var(--ok)}
 .passos{margin:0;padding-left:20px;font-size:13.5px;color:var(--ink-2);display:flex;flex-direction:column;gap:4px}
 code{font-family:var(--f-mono);font-size:12.5px;background:var(--bg);padding:1px 5px;border-radius:5px;word-break:break-all}
+/* Story do Instagram */
+.st-grade{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:14px;margin-top:10px}
+.st-fig{margin:0;display:flex;flex-direction:column;gap:8px}
+.st-fig img{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:12px;background:var(--bg);border:1px solid var(--line)}
+.st-fig figcaption{font-size:13px;color:var(--ink-2);line-height:1.4}
+#story .card{max-height:calc(100dvh - 32px);overflow:auto}
+a.btn[aria-disabled="true"]{opacity:.5;pointer-events:none}

@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icone-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..900&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="estilo.css?v=2">
+<link rel="stylesheet" href="estilo.css?v=3">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)} body{margin:0} img{max-width:100%} [hidden]{display:none!important}</style>
 </head>
 <body>
@@ -94,6 +94,7 @@
           </div>
           <div class="row" style="border-top:1px solid var(--line);padding-top:12px">
             <button class="btn amarelo sm" id="btn-tg-post" type="button" hidden>Postar no Telegram agora</button>
+            <button class="btn amarelo sm" id="btn-story" type="button">Story do Instagram</button>
             <button class="btn ghost sm" id="btn-aprovar" type="button">Aprovar</button>
             <button class="btn ghost sm" id="btn-postada" type="button">Marcar como postada</button>
             <button class="btn ghost sm" id="btn-editar" type="button">Editar</button>
@@ -186,6 +187,47 @@
     </div>
     <div class="layout" style="margin-top:14px">
       <div class="card">
+        <h2>Stories automáticos no Instagram</h2>
+        <div class="status-ml" id="ig-status"><span class="ponto"></span> Carregando…</div>
+        <p class="hint">O Instagram não deixa nenhum app colocar a figurinha de link, então o Story automático sai com <b>“LINK NA BIO”</b> e o código do achado (ex.: <b>#127</b>). A bio aponta para a sua Vitrine, onde o achado aparece pelo código.</p>
+        <ol class="passos">
+          <li>Deixe a conta do Instagram como <b>profissional</b> (Comercial ou Criador de conteúdo) e coloque a <b>Vitrine</b> como link na bio.</li>
+          <li>No <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">painel de desenvolvedores da Meta</a>, crie um app com o caso de uso <b>Instagram › API com login do Instagram</b>, adicione a sua conta e gere o <b>token de acesso</b>.</li>
+          <li>Cole o token abaixo. Ele fica no cofre do banco e é renovado sozinho antes de vencer.</li>
+        </ol>
+        <form id="f-ig" class="fgrid" style="margin-top:10px" novalidate>
+          <label class="f w2" for="ig-token">Token do Instagram<input class="in" id="ig-token" type="password" autocomplete="off" placeholder="Deixe em branco para manter"></label>
+          <div class="f" style="justify-content:flex-end"><button class="btn" type="submit" id="ig-salvar">Salvar e testar</button></div>
+        </form>
+        <div class="fgrid" style="margin-top:12px">
+          <label class="f" for="ig-int">Um Story a cada (min)<input class="in" id="ig-int" type="number" min="30" max="1440" step="15"></label>
+          <label class="f" for="ig-ini">Das (hora)<input class="in" id="ig-ini" type="number" min="0" max="23"></label>
+          <label class="f" for="ig-fim">Até (hora)<input class="in" id="ig-fim" type="number" min="1" max="24"></label>
+          <label class="f" for="ig-min">Desconto mínimo (%)<input class="in" id="ig-min" type="number" min="0" max="95" step="5"></label>
+        </div>
+        <label class="row" style="font-size:14px;gap:6px;margin-top:8px"><input type="checkbox" id="ig-ativo"> Story automático ligado</label>
+        <div class="row"><button class="btn amarelo" id="ig-salvar-agenda" type="button">Salvar agenda</button></div>
+        <p class="hint" id="ig-msg"></p>
+      </div>
+      <div class="card">
+        <h2>Aviso de achadão</h2>
+        <p class="hint" id="al-status">Carregando…</p>
+        <p class="hint">Quando entrar uma oferta com desconto alto, o seu bot do Telegram te manda <b>em particular</b> a arte do Story com o quadro “TOQUE NO LINK AQUI” e o link. Você posta no celular e põe a figurinha de link por cima (uns 20 segundos).</p>
+        <ol class="passos">
+          <li>No Telegram, abra o seu bot <a id="al-bot" href="https://t.me/ocaradosachados_bot" target="_blank" rel="noopener">@ocaradosachados_bot</a> e toque em <b>Iniciar</b>.</li>
+          <li>Volte aqui e toque em <b>Vincular minha conversa</b>.</li>
+        </ol>
+        <div class="row"><button class="btn" id="al-vincular" type="button">Vincular minha conversa</button><button class="btn ghost" id="al-testar" type="button">Mandar um aviso de teste</button></div>
+        <div class="fgrid" style="margin-top:12px">
+          <label class="f" for="al-min">Avisar a partir de (% OFF)<input class="in" id="al-min" type="number" min="10" max="95" step="5"></label>
+        </div>
+        <label class="row" style="font-size:14px;gap:6px;margin-top:8px"><input type="checkbox" id="al-ativo"> Avisos ligados (das 8h às 22h, no máximo 2 por vez)</label>
+        <div class="row"><button class="btn amarelo" id="al-salvar" type="button">Salvar</button></div>
+        <p class="hint" id="al-msg"></p>
+      </div>
+    </div>
+    <div class="layout" style="margin-top:14px">
+      <div class="card">
         <h2>Shopee</h2>
         <div class="status-ml" id="shp-status"><span class="ponto"></span> Carregando…</div>
         <p class="hint" id="shp-sinc"></p>
@@ -264,11 +306,31 @@
     <div class="row"><button class="btn amarelo" type="submit" id="ed-salvar">Salvar na fila</button><span class="hint" id="ed-msg"></span></div>
   </form>
 </dialog>
+<!-- STORY -->
+<dialog id="story" style="border:0;border-radius:14px;padding:0;max-width:760px;width:calc(100% - 32px);background:var(--surface);color:var(--ink)">
+  <div class="card" style="border:0">
+    <div class="row" style="justify-content:space-between"><h2 id="st-tit">Story do Instagram</h2><button class="btn ghost sm" type="button" id="st-fechar">Fechar</button></div>
+    <p class="hint" id="st-msg">Gerando as artes…</p>
+    <div class="st-grade">
+      <figure class="st-fig">
+        <img id="st-img-link" alt="Arte do Story com espaço para a figurinha de link">
+        <figcaption><b>Com figurinha de link</b> (converte mais)<br>Baixe, poste no Story e coloque a figurinha <b>Link</b> em cima do quadro amarelo.</figcaption>
+        <div class="row"><a class="btn amarelo sm" id="st-baixar-link" download>Baixar arte</a><button class="btn sm" id="st-copiar" type="button">Copiar link</button></div>
+      </figure>
+      <figure class="st-fig">
+        <img id="st-img-bio" alt="Arte do Story com link na bio">
+        <figcaption><b>Link na bio</b> (é a que vai no automático)<br>Mostra o código do achado para a pessoa achar na Vitrine.</figcaption>
+        <div class="row"><a class="btn ghost sm" id="st-baixar-bio" download>Baixar arte</a><button class="btn ghost sm" id="st-ig-postar" type="button" hidden>Publicar agora no Instagram</button></div>
+      </figure>
+    </div>
+    <div class="row" style="border-top:1px solid var(--line);padding-top:12px"><button class="btn" id="st-postei" type="button">Já postei este Story</button><span class="hint" id="st-cod"></span></div>
+  </div>
+</dialog>
 <div class="toast" id="toast" hidden></div>
 
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=2"></script>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

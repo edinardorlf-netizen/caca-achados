@@ -2,7 +2,7 @@
    Fila de promoções de afiliado com posts prontos. Dados no Supabase (só o dono vê). */
 const CFG = window.ACHADOS_CONFIG;
 const sb = supabase.createClient(CFG.url, CFG.key, { auth: { persistSession: true } });
-const FN = `${CFG.url}/functions/v1/achados-ml`, FN_SHP = `${CFG.url}/functions/v1/achados-shopee`;
+const FN = `${CFG.url}/functions/v1/achados-ml`, FN_SHP = `${CFG.url}/functions/v1/achados-shopee`, FN_ST = `${CFG.url}/functions/v1/achados-story`;
 
 const MKT = {
   shopee:{nome:"Shopee",cor:"var(--shopee)",
@@ -19,6 +19,7 @@ const MKT = {
     dica:"No app: Perfil › Central de criadores › Afiliados › Mercado de produtos. Adicione à sua vitrine e use nas lives e vídeos (carrinho laranja)."},
   outro:{nome:"Outra loja",cor:"var(--outro)",links:[],dica:""},
 };
+let igPronto = false, stAtual = null;
 let ofertas = [], selId = null, canal = "whatsapp", filtroMkt = "todas", editId = null, canalRT = null, cfgML = null, catsML = null, tgPronto = false, amzTag = null;
 const $ = (s) => document.querySelector(s);
 const brl = (v) => v == null || isNaN(v) ? "" : Number(v).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
@@ -52,7 +53,7 @@ const errMsg = (e) => (e && (e.message || e.error_description || e.erro)) || Str
 // Banco ↔ tela
 const daLinha = (r) => ({ id:r.id, titulo:r.titulo, marketplace:r.marketplace, categoria:r.categoria, link:r.link, linkProduto:r.link_produto,
   precoDe: r.preco_de!=null?Number(r.preco_de):null, precoPor: r.preco_por!=null?Number(r.preco_por):null, cupom:r.cupom, comissao: r.comissao!=null?Number(r.comissao):null,
-  validade:r.validade, imagem:r.imagem, nota:r.nota, status:r.status, canais:r.canais||[], exemplo:r.exemplo, fonte:r.fonte, linkAuto:r.link_auto, mlPosicao:r.ml_posicao, criadoEm:r.criado_em, postadoEm:r.postado_em });
+  validade:r.validade, imagem:r.imagem, nota:r.nota, status:r.status, canais:r.canais||[], exemplo:r.exemplo, fonte:r.fonte, linkAuto:r.link_auto, mlPosicao:r.ml_posicao, criadoEm:r.criado_em, postadoEm:r.postado_em, num:r.num, storyEm:r.story_em, igPostadoEm:r.ig_postado_em });
 const paraLinha = (o) => ({ titulo:o.titulo, marketplace:o.marketplace, categoria:o.categoria||null, link:o.link||null, preco_de:o.precoDe, preco_por:o.precoPor,
   cupom:o.cupom||null, comissao:o.comissao, validade:o.validade||null, imagem:o.imagem||null, nota:o.nota||null });
 
@@ -129,7 +130,7 @@ function render(){
     return `<div class="oferta" role="button" tabindex="0" data-id="${o.id}" aria-current="${o.id===selId}" style="--c:${m.cor}">
       <div class="thumb">${o.imagem?`<img src="${esc(o.imagem)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`:`<b>${m.nome}</b>`}</div>
       <div style="min-width:0"><div class="o-tit">${esc(o.titulo)}</div>
-        <div class="o-meta"><span class="tag mk">${m.nome}</span>${o.fonte==="ml"?`<span class="tag">Mais vendido${o.mlPosicao?` #${o.mlPosicao}`:""}</span>`:""}${o.exemplo?'<span class="tag ex">Exemplo</span>':""}${o.cupom?`<span class="tag">Cupom ${esc(o.cupom)}</span>`:""}${o.comissao?`<span class="tag ok">${String(o.comissao).replace(".",",")}% comissão</span>`:""}${vencida(o)?'<span class="tag warn">Vencida</span>':o.validade?`<span class="tag">até ${new Date(o.validade+"T12:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span>`:""}${!o.link?'<span class="tag warn">Sem link de afiliado</span>':o.linkAuto?'<span class="tag ok">Link montado</span>':""}${o.status==="aprovada"?'<span class="tag ok">Aprovada</span>':""}</div>
+        <div class="o-meta">${o.num?`<span class="tag">#${o.num}</span>`:""}<span class="tag mk">${m.nome}</span>${o.storyEm||o.igPostadoEm?'<span class="tag ok">Story</span>':""}${o.fonte==="ml"?`<span class="tag">Mais vendido${o.mlPosicao?` #${o.mlPosicao}`:""}</span>`:""}${o.exemplo?'<span class="tag ex">Exemplo</span>':""}${o.cupom?`<span class="tag">Cupom ${esc(o.cupom)}</span>`:""}${o.comissao?`<span class="tag ok">${String(o.comissao).replace(".",",")}% comissão</span>`:""}${vencida(o)?'<span class="tag warn">Vencida</span>':o.validade?`<span class="tag">até ${new Date(o.validade+"T12:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span>`:""}${!o.link?'<span class="tag warn">Sem link de afiliado</span>':o.linkAuto?'<span class="tag ok">Link montado</span>':""}${o.status==="aprovada"?'<span class="tag ok">Aprovada</span>':""}</div>
         <div class="score">Nota ${score(o)}${o.categoria?` · ${esc(o.categoria)}`:""}</div></div>
       <div class="preco">${o.precoDe&&d?`<s>${brl(o.precoDe)}</s>`:""}<strong>${brl(o.precoPor)||"—"}</strong>${d?`<span class="off">-${d}%</span>`:""}</div>
     </div>`; }).join("");
@@ -146,6 +147,7 @@ function renderGerador(){
   $("#post").value = gerarPost(o, canal); atualizaLinks();
   $("#btn-postada").textContent = o.status==="postada" ? "Já postada" : "Marcar como postada";
   $("#btn-tg-post").hidden = !(tgPronto && o.link && o.status!=="postada");
+  $("#btn-story").disabled = !o.link; $("#btn-story").title = o.link ? "" : "Salve o link de afiliado primeiro";
   $("#btn-aprovar").hidden = o.status==="postada";
   $("#btn-aprovar").textContent = o.status==="aprovada" ? "Tirar aprovação" : "Aprovar";
 }
@@ -275,6 +277,116 @@ $("#btn-tg-post").onclick = async () => {
 $("#btn-descartar").onclick = () => setStatus("descartada");
 $("#btn-editar").onclick = () => { const o=ofertas.find(x=>x.id===selId); if(o) abrirEditor(o, o.id); };
 
+
+// ---------- Story do Instagram ----------
+const dataHora = (d) => new Date(d).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+function renderInstagram(t){
+  igPronto = !!(t.tem_token && t.usuario);
+  $("#ig-status").innerHTML = igPronto ? `<span class="ponto ${cfgML.ig_ativo?"on":""}"></span> Conectado a <b>@${esc(t.usuario)}</b> · automático ${cfgML.ig_ativo?"<b>ligado</b>":"desligado"}${cfgML.ig_ultimo_post?` · último Story ${dataHora(cfgML.ig_ultimo_post)}`:""}${t.token_exp?` · token renova sozinho (vence ${new Date(t.token_exp).toLocaleDateString("pt-BR")})`:""}`
+    : t.tem_token ? `<span class="ponto"></span> Token salvo, mas ainda não testado.` : `<span class="ponto"></span> Ainda não conectado. Enquanto isso, use o botão “Story do Instagram” em cada oferta para postar à mão.`;
+  $("#ig-int").value = cfgML.ig_intervalo_min ?? 120; $("#ig-ini").value = cfgML.ig_hora_ini ?? 9; $("#ig-fim").value = cfgML.ig_hora_fim ?? 21;
+  $("#ig-min").value = cfgML.ig_desconto_min ?? 30; $("#ig-ativo").checked = !!cfgML.ig_ativo;
+  $("#ig-msg").textContent = cfgML.ig_msg || "";
+}
+function renderAlerta(){
+  $("#al-status").innerHTML = cfgML.alerta_chat_id ? `<span class="ponto ${cfgML.alerta_ativo?"on":""}"></span> Conversa vinculada · avisos ${cfgML.alerta_ativo?"<b>ligados</b>":"desligados"} a partir de ${cfgML.alerta_min ?? 40}% OFF` : `<span class="ponto"></span> Ainda não vinculado.`;
+  $("#al-min").value = cfgML.alerta_min ?? 40; $("#al-ativo").checked = cfgML.alerta_ativo !== false;
+  $("#al-msg").textContent = cfgML.alerta_msg || "";
+}
+const souDono = async () => { const { data:{ user } } = await sb.auth.getUser(); return (user?.email||"").toLowerCase(); };
+const limitar = (v,a,b,d) => { const n = Number(v); return isFinite(n) && v!=="" ? Math.max(a, Math.min(b, Math.round(n))) : d; };
+$("#f-ig").addEventListener("submit", async (e)=>{
+  e.preventDefault();
+  const tok = $("#ig-token").value.trim();
+  $("#ig-salvar").disabled=true; $("#ig-msg").textContent="Salvando…";
+  if(tok){ const { error } = await sb.rpc("achados_salvar_ig", { p_token: tok }); if(error){ $("#ig-msg").textContent = error.message; $("#ig-salvar").disabled=false; return; } }
+  $("#ig-token").value="";
+  try{ const r = await chamarML("ig_testar", {}, FN_ST); toast(`Instagram conectado: @${r.usuario}`); }
+  catch(err){ $("#ig-msg").textContent = errMsg(err); }
+  $("#ig-salvar").disabled=false; await carregarML();
+});
+$("#ig-salvar-agenda").onclick = async () => {
+  const patch = { ig_intervalo_min: limitar($("#ig-int").value,30,1440,120), ig_hora_ini: limitar($("#ig-ini").value,0,23,9), ig_hora_fim: limitar($("#ig-fim").value,1,24,21),
+    ig_desconto_min: limitar($("#ig-min").value,0,95,30), ig_ativo: $("#ig-ativo").checked };
+  if(patch.ig_ativo && !igPronto) return toast("Conecte o Instagram (Salvar e testar) antes de ligar o automático.");
+  if(patch.ig_hora_fim <= patch.ig_hora_ini) return toast("A hora final precisa ser depois da inicial.");
+  const { error } = await sb.from("achados_config").update(patch).eq("dono", await souDono());
+  if(error) return toast("Não consegui salvar: "+error.message);
+  toast(patch.ig_ativo ? `Story automático ligado: 1 a cada ${patch.ig_intervalo_min} min, das ${patch.ig_hora_ini}h às ${patch.ig_hora_fim}h` : "Agenda salva (automático desligado)");
+  carregarML();
+};
+$("#al-vincular").onclick = async () => {
+  const b=$("#al-vincular"); b.disabled=true; $("#al-msg").textContent="Procurando a sua conversa com o bot…";
+  try{ const r = await chamarML("alerta_vincular", {}, FN_ST); toast(`Vinculado${r.nome?`: ${r.nome}`:""}. Confira a mensagem do bot no Telegram.`); }
+  catch(err){ $("#al-msg").textContent = errMsg(err); }
+  b.disabled=false; await carregarML();
+};
+$("#al-testar").onclick = async () => {
+  const b=$("#al-testar"); b.disabled=true; $("#al-msg").textContent="Gerando a arte e mandando…";
+  try{ const r = await chamarML("alerta_testar", {}, FN_ST); $("#al-msg").textContent = `Aviso de teste enviado (achado #${r.num}). Confira no Telegram.`; }
+  catch(err){ $("#al-msg").textContent = errMsg(err); }
+  b.disabled=false;
+};
+$("#al-salvar").onclick = async () => {
+  const patch = { alerta_min: limitar($("#al-min").value,10,95,40), alerta_ativo: $("#al-ativo").checked };
+  const { error } = await sb.from("achados_config").update(patch).eq("dono", await souDono());
+  if(error) return toast("Não consegui salvar: "+error.message);
+  toast(patch.alerta_ativo ? `Avisos ligados a partir de ${patch.alerta_min}% OFF` : "Avisos desligados"); carregarML();
+};
+
+// Janela do Story: gera as artes no servidor e deixa baixar / compartilhar / publicar
+async function prepararDownload(a, url, nome){
+  a.removeAttribute("href"); a.setAttribute("aria-disabled","true");
+  try{
+    const blob = await (await fetch(url)).blob();
+    const arq = new File([blob], nome, { type: "image/jpeg" });
+    a.href = URL.createObjectURL(blob); a.download = nome; a.removeAttribute("aria-disabled");
+    return arq;
+  }catch{ a.href = url; a.target = "_blank"; a.removeAttribute("aria-disabled"); return null; }
+}
+async function abrirStory(){
+  const o = ofertas.find(x=>x.id===selId); if(!o) return;
+  if(!o.link) return toast("Salve o link de afiliado antes de fazer o Story.");
+  const d=$("#story"); d.showModal ? d.showModal() : d.setAttribute("open","");
+  $("#st-tit").textContent = `Story · achado #${o.num||""}`; $("#st-msg").textContent = "Gerando as artes… (a primeira vez leva alguns segundos)";
+  $("#st-img-link").removeAttribute("src"); $("#st-img-bio").removeAttribute("src"); $("#st-cod").textContent = "";
+  $("#st-ig-postar").hidden = !igPronto; $("#st-compartilhar")?.remove();
+  let r;
+  try{ r = await chamarML("gerar", { id: o.id }, FN_ST); }
+  catch(err){ $("#st-msg").textContent = errMsg(err); return; }
+  stAtual = { id: o.id, ...r };
+  $("#st-img-link").src = r.arte_link; $("#st-img-bio").src = r.arte_bio;
+  $("#st-cod").textContent = `Na Vitrine, o código #${r.num} leva direto a este achado.`;
+  $("#st-msg").textContent = o.storyEm || o.igPostadoEm ? `Este achado já foi para o Story${o.igPostadoEm?` (automático em ${dataHora(o.igPostadoEm)})`:""}${o.storyEm?` (à mão em ${dataHora(o.storyEm)})`:""}.` : "Pronto! Escolha a arte.";
+  const arqLink = await prepararDownload($("#st-baixar-link"), r.arte_link, `achado-${r.num}-story.jpg`);
+  await prepararDownload($("#st-baixar-bio"), r.arte_bio, `achado-${r.num}-story-bio.jpg`);
+  // No celular: compartilhar direto para o Instagram (o link vai junto no texto para você copiar)
+  if(arqLink && navigator.canShare && navigator.canShare({ files: [arqLink] })){
+    const b = document.createElement("button"); b.className = "btn sm"; b.type = "button"; b.id = "st-compartilhar"; b.textContent = "Compartilhar no Instagram";
+    b.onclick = async () => { try{ await navigator.clipboard.writeText(r.link); toast("Link copiado: cole na figurinha de link"); }catch{} try{ await navigator.share({ files: [arqLink] }); }catch{} };
+    $("#st-baixar-link").after(b);
+  }
+}
+$("#btn-story").onclick = abrirStory;
+$("#st-fechar").onclick = () => $("#story").close?.();
+$("#st-copiar").onclick = async () => {
+  if(!stAtual) return;
+  try{ await navigator.clipboard.writeText(stAtual.link); toast("Link de afiliado copiado: cole na figurinha de link"); }
+  catch{ prompt("Copie o link:", stAtual.link); }
+};
+$("#st-postei").onclick = async () => {
+  if(!stAtual) return;
+  try{ await chamarML("story_postado", { id: stAtual.id }, FN_ST); toast("Anotado: Story postado"); $("#story").close?.(); await carregarOfertas(); }
+  catch(err){ toast(errMsg(err)); }
+};
+$("#st-ig-postar").onclick = async () => {
+  if(!stAtual) return;
+  const b=$("#st-ig-postar"); b.disabled=true; b.textContent="Publicando…";
+  try{ await chamarML("ig_postar", { id: stAtual.id }, FN_ST); toast("Story publicado no Instagram"); $("#story").close?.(); await carregarOfertas(); }
+  catch(err){ $("#st-msg").textContent = errMsg(err); }
+  b.disabled=false; b.textContent="Publicar agora no Instagram";
+};
+
 // ---------- Mercado Livre ----------
 async function chamarML(acao, extra={}, url=FN){
   const { data:{ session } } = await sb.auth.getSession();
@@ -284,9 +396,9 @@ async function chamarML(acao, extra={}, url=FN){
   return j;
 }
 async function carregarML(){
-  const [st, cf, ts, ss] = await Promise.all([ sb.rpc("achados_ml_status"),
-    sb.from("achados_config").select("ml_client_id,ml_categorias,ml_categorias_nomes,desconto_min,ml_afiliado_query,ml_afiliado_em,tg_ativo,tg_intervalo_min,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post,tg_msg,shp_app_id,shp_ativo,shp_palavras,shp_top,shp_desconto_min,shp_comissao_min,shp_sinc_em,shp_sinc_ok,shp_sinc_msg,amz_tag,vit_slug,vit_telegram,vit_whatsapp,vit_instagram,vit_tiktok").maybeSingle(),
-    sb.rpc("achados_tg_status"), sb.rpc("achados_shp_status") ]);
+  const [st, cf, ts, ss, is] = await Promise.all([ sb.rpc("achados_ml_status"),
+    sb.from("achados_config").select("ml_client_id,ml_categorias,ml_categorias_nomes,desconto_min,ml_afiliado_query,ml_afiliado_em,tg_ativo,tg_intervalo_min,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post,tg_msg,ig_ativo,ig_intervalo_min,ig_hora_ini,ig_hora_fim,ig_desconto_min,ig_ultimo_post,ig_msg,ig_usuario,alerta_ativo,alerta_min,alerta_chat_id,alerta_msg,shp_app_id,shp_ativo,shp_palavras,shp_top,shp_desconto_min,shp_comissao_min,shp_sinc_em,shp_sinc_ok,shp_sinc_msg,amz_tag,vit_slug,vit_telegram,vit_whatsapp,vit_instagram,vit_tiktok").maybeSingle(),
+    sb.rpc("achados_tg_status"), sb.rpc("achados_shp_status"), sb.rpc("achados_ig_status") ]);
   const s = (st.data||[])[0] || {};
   cfgML = cf.data || { ml_categorias:[], ml_categorias_nomes:{}, desconto_min:20 };
   $("#ml-status").innerHTML = s.conectado ? `<span class="ponto on"></span> Conectado${s.nickname?` como <b>${esc(s.nickname)}</b>`:""}`
@@ -298,7 +410,7 @@ async function carregarML(){
   $("#ml-min").value = cfgML.desconto_min ?? 20;
   if(s.conectado && !catsML){ try{ catsML = (await chamarML("categorias")).categorias || []; }catch(e){ $("#ml-cats").innerHTML = `<span class="erro">${esc(errMsg(e))}</span>`; } }
   renderCats(s.conectado);
-  renderAfiliado(); renderTelegram((ts.data||[])[0] || {}); renderShopee((ss.data||[])[0] || {});
+  renderAfiliado(); renderTelegram((ts.data||[])[0] || {}); renderShopee((ss.data||[])[0] || {}); renderInstagram((is.data||[])[0] || {}); renderAlerta();
   amzTag = cfgML.amz_tag || null; $("#amz-tag").value = amzTag || "";
   const vurl = new URL("vitrine.html", location.href); if(cfgML.vit_slug && cfgML.vit_slug!=="ocaradosachados") vurl.searchParams.set("c", cfgML.vit_slug);
   $("#vit-url").value = vurl.toString(); $("#vit-abrir").href = vurl.toString();
