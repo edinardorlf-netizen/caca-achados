@@ -68,27 +68,42 @@ async function credenciais(dono: string) {
 
 async function buscar(dono: string, deadline: number) {
   const { appId, secret } = await credenciais(dono);
-  const { data: cfg } = await db.from("achados_config").select("shp_palavras,shp_top,shp_desconto_min,shp_comissao_min").eq("dono", dono).single();
-  const consultas: { nome: string; q: string }[] = [];
-  if (cfg?.shp_top !== false) consultas.push({ nome: "Mais vendidos", q: `{productOfferV2(listType: 2, limit: 50, page: 1){nodes{${CAMPOS}}}}` });
-  for (const p of (cfg?.shp_palavras || []).slice(0, 12)) {
+  const { data: cfg } = await db.from("achados_config").select("shp_palavras,shp_top,shp_desconto_min,shp_comissao_min,shp_cursor,shp_pag").eq("dono", dono).single();
+  const consultas: { nome: string; q: string; pg?: number }[] = [];
+  // Mais vendidos: 5 páginas de 50 por busca, em rodízio (página 1 sempre, para pegar o topo do momento)
+  const pag0 = Math.max(2, Number(cfg?.shp_pag || 2));
+  const paginas = cfg?.shp_top !== false ? [1, pag0, pag0 + 1, pag0 + 2, pag0 + 3] : [];
+  for (const pg of paginas) consultas.push({ nome: "Mais vendidos", pg, q: `{productOfferV2(listType: 2, limit: 50, page: ${pg}){nodes{${CAMPOS}}}}` });
+  // Rodízio (como as categorias do Mercado Livre): até 10 palavras por busca, continuando de onde a anterior parou
+  const todas: string[] = cfg?.shp_palavras || [];
+  const ini = todas.length ? Math.max(0, Number(cfg?.shp_cursor || 0)) % todas.length : 0;
+  const daVez = [...todas.slice(ini), ...todas.slice(0, ini)].slice(0, 10);
+  if (todas.length) await db.from("achados_config").update({ shp_cursor: (ini + daVez.length) % todas.length }).eq("dono", dono);
+  for (const p of daVez) {
     consultas.push({ nome: p, q: `{productOfferV2(keyword: ${JSON.stringify(p)}, sortType: 2, limit: 30, page: 1){nodes{${CAMPOS}}}}` });
   }
   const minDesc = Number(cfg?.shp_desconto_min ?? 30), minCom = Number(cfg?.shp_comissao_min ?? 0);
   // deno-lint-ignore no-explicit-any
   const vistos = new Map<string, { o: any; cat: string }>();
   const avisos: string[] = [];
+  let fimLista = false, semPalavra = false;
   for (const c of consultas) {
     if (Date.now() > deadline) { avisos.push("O tempo acabou; o resto entra na próxima busca."); break; }
+    if (semPalavra && !c.pg) continue;
     try {
       const d = await gql(appId, secret, c.q);
-      for (const n of d?.productOfferV2?.nodes || []) if (n?.itemId && !vistos.has(String(n.itemId))) vistos.set(String(n.itemId), { o: n, cat: c.nome });
+      const nodes = d?.productOfferV2?.nodes || [];
+      if (c.pg && c.pg > 1 && nodes.length < 50) fimLista = true;
+      for (const n of nodes) if (n?.itemId && !vistos.has(String(n.itemId))) vistos.set(String(n.itemId), { o: n, cat: c.nome });
     } catch (e) {
       const m = (e as Error).message;
       if (/AppID|liberou|negado/.test(m)) throw e; // problema de acesso: não adianta seguir
+      // A Shopee às vezes desliga a busca por palavra (erro 10000): avisa uma vez e segue só com os mais vendidos
+      if (!c.pg && /10000/.test(m)) { semPalavra = true; avisos.push("Busca por palavra indisponível na Shopee agora (erro 10000); usando só os mais vendidos."); continue; }
       avisos.push(`${c.nome}: ${m}`);
     }
   }
+  if (paginas.length) await db.from("achados_config").update({ shp_pag: fimLista || pag0 + 4 > 40 ? 2 : pag0 + 4 }).eq("dono", dono);
   const hoje = Date.now() / 1000;
   const bons = [...vistos.values()].filter(({ o }) => {
     const desc = Number(o.priceDiscountRate || 0), com = Number(o.commissionRate || 0) * 100;
@@ -114,8 +129,9 @@ async function buscar(dono: string, deadline: number) {
     const { error } = await db.from("achados_ofertas").upsert(linhas, { onConflict: "dono,shp_item_id" });
     if (error) throw new Error(`Erro ao salvar ofertas: ${error.message}`);
   }
-  const msg = `${vistos.size} produtos conferidos, ${bons.length} com ${minDesc}% OFF ou mais (${novos} novos).${avisos.length ? " " + avisos.join(" ") : ""}`;
-  await db.from("achados_config").update({ shp_sinc_em: new Date().toISOString(), shp_sinc_ok: avisos.length === 0, shp_sinc_msg: msg.slice(0, 600) }).eq("dono", dono);
+  const rodizio = todas.length > daVez.length ? ` ${daVez.length} de ${todas.length} palavras nesta busca; as outras entram na próxima.` : "";
+  const msg = `${vistos.size} produtos conferidos, ${bons.length} com ${minDesc}% OFF ou mais (${novos} novos).${rodizio}${avisos.length ? " " + avisos.join(" ") : ""}`;
+  await db.from("achados_config").update({ shp_sinc_em: new Date().toISOString(), shp_sinc_ok: avisos.filter((a) => !a.startsWith("Busca por palavra")).length === 0, shp_sinc_msg: msg.slice(0, 600) }).eq("dono", dono);
   return { vistos: vistos.size, achados: bons.length, novos, avisos, msg };
 }
 
