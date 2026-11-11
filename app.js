@@ -348,18 +348,17 @@ $("#ig-salvar-agenda").onclick = async () => {
 };
 function renderWhatsApp(){
   const n = cfgML.wa_qtd ?? 1, cada = cfgML.wa_intervalo_min ?? 60, ini = cfgML.wa_hora_ini ?? 6, fim = cfgML.wa_hora_fim ?? 22;
-  $("#wa-status").innerHTML = !cfgML.alerta_chat_id ? `<span class="ponto"></span> Falta vincular a sua conversa com o bot (cartão Aviso de achadão).`
-    : `<span class="ponto ${cfgML.wa_ativo?"on":""}"></span> ${cfgML.wa_ativo?`<b>Ligada</b>: ${n} oferta${n>1?"s":""} a cada ${cada} min, das ${ini}h às ${fim}h`:"Desligada"}`;
-  $("#wa-int").value = cada; $("#wa-n").value = n; $("#wa-ini").value = ini; $("#wa-fim").value = fim; $("#wa-min").value = cfgML.wa_desconto_min ?? 30; $("#wa-ativo").checked = cfgML.wa_ativo !== false;
+  $("#wa-status").innerHTML = `<span class="ponto ${cfgML.zap_ativo?"on":""}"></span> ${cfgML.zap_ativo?`<b>Robô ligado</b>: ${n} oferta${n>1?"s":""} a cada ${cada} min, das ${ini}h às ${fim}h (precisa do programa aberto no computador)`:"Robô desligado"}`;
+  $("#wa-int").value = cada; $("#wa-n").value = n; $("#wa-ini").value = ini; $("#wa-fim").value = fim; $("#wa-min").value = cfgML.wa_desconto_min ?? 30; $("#wa-ativo").checked = !!cfgML.zap_ativo;
   $("#wa-msg").textContent = cfgML.wa_msg || "";
 }
 $("#wa-salvar").onclick = async () => {
   const patch = { wa_intervalo_min: limitar($("#wa-int").value,10,1440,60), wa_qtd: limitar($("#wa-n").value,1,30,1), wa_hora_ini: limitar($("#wa-ini").value,0,23,6), wa_hora_fim: limitar($("#wa-fim").value,1,24,22),
-    wa_desconto_min: limitar($("#wa-min").value,0,95,30), wa_ativo: $("#wa-ativo").checked };
+    wa_desconto_min: limitar($("#wa-min").value,0,95,30), zap_ativo: $("#wa-ativo").checked, wa_ativo: false };
   if(patch.wa_hora_fim <= patch.wa_hora_ini) return toast("A hora final precisa ser depois da inicial.");
   const { error } = await sb.from("achados_config").update(patch).eq("dono", await souDono());
   if(error) return toast("Não consegui salvar: "+error.message);
-  toast(patch.wa_ativo ? `Hora do WhatsApp: ${patch.wa_qtd} oferta(s) a cada ${patch.wa_intervalo_min} min, das ${patch.wa_hora_ini}h às ${patch.wa_hora_fim}h` : "Hora do WhatsApp desligada"); carregarML();
+  toast(patch.zap_ativo ? `Robô do WhatsApp: ${patch.wa_qtd} oferta(s) a cada ${patch.wa_intervalo_min} min, das ${patch.wa_hora_ini}h às ${patch.wa_hora_fim}h` : "Robô do WhatsApp desligado"); carregarML();
 };
 $("#wa-agora").onclick = async () => {
   const b=$("#wa-agora"); b.disabled=true; $("#wa-msg").textContent="Mandando…";
@@ -450,7 +449,7 @@ async function chamarML(acao, extra={}, url=FN){
 }
 async function carregarML(){
   const [st, cf, ts, ss, is] = await Promise.all([ sb.rpc("achados_ml_status"),
-    sb.from("achados_config").select("ml_client_id,ml_categorias,ml_categorias_nomes,desconto_min,ml_afiliado_query,ml_afiliado_em,tg_ativo,tg_intervalo_min,tg_qtd,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post,tg_msg,ig_ativo,ig_intervalo_min,ig_hora_ini,ig_hora_fim,ig_desconto_min,ig_ultimo_post,ig_msg,ig_usuario,alerta_ativo,alerta_min,alerta_chat_id,alerta_msg,wa_ativo,wa_intervalo_min,wa_qtd,wa_hora_ini,wa_hora_fim,wa_desconto_min,wa_ultimo_aviso,wa_msg,shp_app_id,shp_ativo,shp_palavras,shp_top,shp_desconto_min,shp_comissao_min,shp_sinc_em,shp_sinc_ok,shp_sinc_msg,amz_tag,vit_slug,vit_telegram,vit_whatsapp,vit_instagram,vit_tiktok").maybeSingle(),
+    sb.from("achados_config").select("ml_client_id,ml_categorias,ml_categorias_nomes,desconto_min,ml_afiliado_query,ml_afiliado_em,tg_ativo,tg_intervalo_min,tg_qtd,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post,tg_msg,ig_ativo,ig_intervalo_min,ig_hora_ini,ig_hora_fim,ig_desconto_min,ig_ultimo_post,ig_msg,ig_usuario,alerta_ativo,alerta_min,alerta_chat_id,alerta_msg,wa_ativo,zap_ativo,wa_intervalo_min,wa_qtd,wa_hora_ini,wa_hora_fim,wa_desconto_min,wa_ultimo_aviso,wa_msg,shp_app_id,shp_ativo,shp_palavras,shp_top,shp_desconto_min,shp_comissao_min,shp_sinc_em,shp_sinc_ok,shp_sinc_msg,amz_tag,vit_slug,vit_telegram,vit_whatsapp,vit_instagram,vit_tiktok").maybeSingle(),
     sb.rpc("achados_tg_status"), sb.rpc("achados_shp_status"), sb.rpc("achados_ig_status") ]);
   const s = (st.data||[])[0] || {};
   cfgML = cf.data || { ml_categorias:[], ml_categorias_nomes:{}, desconto_min:20 };

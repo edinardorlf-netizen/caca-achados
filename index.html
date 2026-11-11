@@ -235,9 +235,9 @@
     </div>
     <div class="layout" style="margin-top:14px">
       <div class="card">
-        <h2>Hora do WhatsApp</h2>
+        <h2>Robô do WhatsApp</h2>
         <p class="hint" id="wa-status">Carregando…</p>
-        <p class="hint">O WhatsApp não deixa nenhum app postar em grupos sozinho sem risco de banir o número. Então, nos horários marcados, o seu bot do Telegram te manda <b>em particular</b> a oferta da vez com o botão <b>Enviar no WhatsApp</b>: o texto já abre pronto, você escolhe o grupo ou canal e envia. Usa a mesma conversa vinculada no cartão <b>Aviso de achadão</b>.</p>
+        <p class="hint">O <b>robô</b> é o programa que fica aberto no seu computador (janela preta do INICIAR). Ele lê estas configurações a cada minuto e posta as ofertas no(s) grupo(s) do WhatsApp. Se o computador dormir ou a janela fechar, ele para.</p>
         <div class="fgrid" style="margin-top:8px">
           <label class="f" for="wa-int">Enviar a cada (min)<input class="in" id="wa-int" type="number" min="10" max="1440" step="5"></label>
           <label class="f" for="wa-n">Ofertas por envio<input class="in" id="wa-n" type="number" min="1" max="30"></label>
@@ -245,7 +245,7 @@
           <label class="f" for="wa-fim">Até (hora)<input class="in" id="wa-fim" type="number" min="1" max="24"></label>
           <label class="f" for="wa-min">Desconto mínimo (%)<input class="in" id="wa-min" type="number" min="0" max="95" step="5"></label>
         </div>
-        <label class="row" style="font-size:14px;gap:6px;margin-top:8px"><input type="checkbox" id="wa-ativo"> Hora do WhatsApp ligada</label>
+        <label class="row" style="font-size:14px;gap:6px;margin-top:8px"><input type="checkbox" id="wa-ativo"> Robô do WhatsApp ligado</label>
         <div class="row"><button class="btn amarelo" id="wa-salvar" type="button">Salvar</button><button class="btn ghost" id="wa-agora" type="button">Mandar uma agora</button></div>
         <p class="hint" id="wa-msg"></p>
       </div>
