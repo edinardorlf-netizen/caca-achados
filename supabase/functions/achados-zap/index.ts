@@ -92,6 +92,13 @@ Deno.serve(async (req) => {
       await db.from("achados_config").update({ wa_msg: `Robô postou ${ids.length} oferta(s) no canal (${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })})` }).eq("dono", c.dono);
       return json({ ok: true });
     }
+    if (body.acao === "atualizacao") {
+      // O robô pergunta se há código novo. Só devolve os arquivos quando a versão do servidor é maior que a dele.
+      const { data: v } = await db.from("zap_codigo").select("versao,arquivos").order("versao", { ascending: false }).limit(1).maybeSingle();
+      const minha = Number(body.versao) || 0;
+      if (!v || v.versao <= minha) return json({ atual: true, versao: v?.versao ?? minha });
+      return json({ atual: false, versao: v.versao, arquivos: v.arquivos });
+    }
     if (body.acao === "novo_grupo") {
       const link = String(body.link || "");
       if (!/^https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]+$/.test(link)) return json({ erro: "link inválido" }, 400);
