@@ -638,14 +638,21 @@ function estSubMostrar(s){
 $("#est-sub").addEventListener("click",(e)=>{ const b=e.target.closest("button[data-s]"); if(b) estSubMostrar(b.dataset.s); });
 const copiarTxt = async (txt) => { try{ await navigator.clipboard.writeText(txt.value); toast("Copiado"); }catch{ txt.select(); toast("Selecionei o texto: copie manualmente"); } };
 
-async function carregarEstudio(){
-  if(estSub==="personagem") return carregarPersonagem();
-  if(estSub==="videos") return carregarVideos();
-  const { data, error } = await sb.from("est_produtos").select("id,titulo,imagem,link,preco_por,desconto,comissao,vendas,afiliados,nota,motivos,status")
-    .neq("status","dispensado").order("nota",{ascending:false}).limit(40);
-  if(error){ $("#est-lista").innerHTML = `<p class="hint">Não consegui carregar: ${esc(error.message)}</p>`; return; }
-  if(!(data||[]).length){ $("#est-lista").innerHTML = `<p class="hint">Toque em <b>Buscar produtos</b> para o Minerador trazer os melhores.</p>`; return; }
-  $("#est-lista").innerHTML = data.map(o=>`<div class="card" data-id="${o.id}">
+// Filtros do Minerador (valem no iPad/celular; lembrados no aparelho)
+const efLer = () => { try{ return JSON.parse(localStorage.getItem("est_filtros")||"{}"); }catch{ return {}; } };
+function efAplicarNaTela(){ const f=efLer(); $("#ef-com").value=f.com??0; $("#ef-ven").value=f.ven??0; $("#ef-ord").value=f.ord||"nota"; $("#ef-novos").checked=!!f.novos; }
+function efSalvar(){ try{ localStorage.setItem("est_filtros", JSON.stringify({ com:Number($("#ef-com").value)||0, ven:Number($("#ef-ven").value)||0, ord:$("#ef-ord").value, novos:$("#ef-novos").checked })); }catch{} }
+let estDados = [];
+function estDesenhar(){
+  const com=Number($("#ef-com").value)||0, ven=Number($("#ef-ven").value)||0, ord=$("#ef-ord").value, novos=$("#ef-novos").checked;
+  let l = estDados.filter(o => Number(o.comissao||0) >= com && Number(o.vendas||0) >= ven && (!novos || o.afiliados==null));
+  const chave = { nota:o=>Number(o.nota||0), vendas:o=>Number(o.vendas||0), comissao:o=>Number(o.comissao||0) }[ord];
+  l.sort((x,y)=>chave(y)-chave(x));
+  $("#ef-cont").textContent = `${l.length} de ${estDados.length} produtos${l.length>40?" (mostrando os 40 primeiros)":""}`;
+  l = l.slice(0,40);
+  if(!estDados.length){ $("#est-lista").innerHTML = `<p class="hint">Toque em <b>Buscar produtos</b> para o Minerador trazer os melhores.</p>`; return; }
+  if(!l.length){ $("#est-lista").innerHTML = `<p class="hint">Nenhum produto passa nos filtros. Diminua a comissão ou as vendas mínimas.</p>`; return; }
+  $("#est-lista").innerHTML = l.map(o=>`<div class="card" data-id="${o.id}">
       <div class="row" style="flex-wrap:nowrap;align-items:flex-start">
         <div class="thumb">${o.imagem?`<img src="${esc(o.imagem)}" alt="" loading="lazy">`:""}</div>
         <div style="min-width:0;flex:1"><div class="row" style="justify-content:space-between"><b>Nota ${o.nota}</b>${o.status==="escolhido"?`<span class="chip" aria-pressed="true">Escolhido</span>`:""}</div>
@@ -654,8 +661,20 @@ async function carregarEstudio(){
       </div>
       <div class="hint">${esc((o.motivos||[]).join(" · "))}</div>
       <label class="hint">Afiliados no produto (app da Shopee, "Afiliados Promovidos"): <input class="in est-afil" type="number" min="0" inputmode="numeric" value="${o.afiliados ?? ""}" placeholder="ex.: 190" style="width:90px"></label>
-      <div class="row"><button class="btn amarelo sm est-esc" type="button">${o.status==="escolhido"?"Tirar dos vídeos":"Escolher para vídeo"}</button><button class="btn ghost sm est-disp" type="button">Dispensar</button>${o.link?`<a class="btn ghost sm" href="${esc(o.link)}" target="_blank" rel="noopener">Ver na Shopee</a>`:""}</div>
+      <div class="row"><button class="btn amarelo sm est-esc" type="button">${o.status==="escolhido"?"Tirar dos vídeos":"Escolher para vídeo"}</button><button class="btn ghost sm est-disp" type="button">Dispensar</button><button class="btn ghost sm est-cop" type="button">Copiar nome</button>${o.link?`<a class="btn ghost sm" href="${esc(o.link)}" target="_blank" rel="noopener">Ver na Shopee</a>`:""}</div>
     </div>`).join("");
+}
+["ef-com","ef-ven","ef-ord","ef-novos"].forEach(id=>{ $("#"+id).addEventListener("input",()=>{ efSalvar(); estDesenhar(); }); });
+efAplicarNaTela();
+
+async function carregarEstudio(){
+  if(estSub==="personagem") return carregarPersonagem();
+  if(estSub==="videos") return carregarVideos();
+  const { data, error } = await sb.from("est_produtos").select("id,titulo,imagem,link,preco_por,desconto,comissao,vendas,afiliados,nota,motivos,status")
+    .neq("status","dispensado").order("nota",{ascending:false}).limit(300);
+  if(error){ $("#est-lista").innerHTML = `<p class="hint">Não consegui carregar: ${esc(error.message)}</p>`; return; }
+  estDados = data || [];
+  estDesenhar();
 }
 $("#est-minerar").onclick = async () => {
   const b=$("#est-minerar"); b.disabled=true; $("#est-msg").textContent="Buscando na Shopee…";
@@ -672,7 +691,8 @@ $("#est-lista").addEventListener("click", async (e)=>{
   const id = card.dataset.id; bt.disabled = true;
   try{
     if(bt.classList.contains("est-esc")){ await chamarML("status", { id, status: bt.textContent.includes("Tirar")?"novo":"escolhido" }, FN_EST); toast(bt.textContent.includes("Tirar")?"Tirado dos vídeos":"Escolhido: aparece na aba Vídeos"); carregarEstudio(); }
-    else if(bt.classList.contains("est-disp")){ await chamarML("status", { id, status:"dispensado" }, FN_EST); card.remove(); }
+    else if(bt.classList.contains("est-disp")){ await chamarML("status", { id, status:"dispensado" }, FN_EST); estDados = estDados.filter(x=>String(x.id)!==String(id)); estDesenhar(); }
+    else if(bt.classList.contains("est-cop")){ const o = estDados.find(x=>String(x.id)===String(id)); try{ await navigator.clipboard.writeText(o?.titulo||""); toast("Nome copiado: cole na busca do app da Shopee"); }catch{ toast("Não consegui copiar"); } }
   }catch(err){ toast(errMsg(err)); }
   bt.disabled = false;
 });

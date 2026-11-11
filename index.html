@@ -345,6 +345,17 @@
         <div class="row"><button class="btn amarelo" id="est-minerar" type="button">Buscar produtos</button><span class="hint" id="est-msg"></span></div>
         <p class="hint">Para filtrar por afiliados: abra o produto no app da Shopee, veja "Afiliados Promovidos" e digite o número no cartão. Com até 300 afiliados a nota sobe; acima disso, desce.</p>
       </div>
+      <div class="card" id="est-filtros">
+        <h2>Filtros</h2>
+        <div class="row">
+          <label class="hint">Comissão mínima (%) <input class="in" id="ef-com" type="number" min="0" step="0.5" inputmode="decimal" value="0" style="width:80px"></label>
+          <label class="hint">Vendidos (mínimo) <input class="in" id="ef-ven" type="number" min="0" step="100" inputmode="numeric" value="0" style="width:100px"></label>
+          <label class="hint">Ordenar por
+            <select class="in" id="ef-ord"><option value="nota">Nota</option><option value="vendas">Mais vendidos</option><option value="comissao">Maior comissão</option></select></label>
+        </div>
+        <label class="hint"><input type="checkbox" id="ef-novos"> Mostrar só os que ainda não conferi (sem nº de afiliados)</label>
+        <div class="hint" id="ef-cont"></div>
+      </div>
       <div id="est-lista" class="layout"></div>
     </div>
 
