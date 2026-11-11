@@ -278,7 +278,6 @@ function postTelegram(o: any, lk: { tg?: string; wa?: string } = {}) {
   const eco = o.preco_de && d ? Number(o.preco_de) - Number(o.preco_por) : 0;
   const linhas = [
     `${cabecalho(d)} ${LOJA[o.marketplace] || ""}`.trim(), "",
-    o.est_status === "aprovado" && o.est_texto ? `${escHtml(o.est_texto)}\n` : null,
     `<b>${escHtml(curto(o.titulo))}</b>`, "",
     o.preco_de && d ? `<s>De ${brl(Number(o.preco_de))}</s>` : null,
     `✅ <b>Por ${brl(Number(o.preco_por))}</b>${d ? ` (${d}% OFF)` : ""}`,
@@ -340,7 +339,7 @@ async function proximaOferta(dono: string, modo: string, minDesc: number) {
   const maxAfil = cf?.afiliados_max || null;
   const lst = (data || []).filter((o: any) => (descontoDe(o) || 0) >= minDesc && !(maxAfil && o.afiliados != null && o.afiliados > maxAfil));
   // deno-lint-ignore no-explicit-any
-  lst.sort((a: any, b: any) => (b.est_status === "aprovado" ? 1 : 0) - (a.est_status === "aprovado" ? 1 : 0) || (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
+  lst.sort((a: any, b: any) => (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
   return lst[0] || null;
 }
 

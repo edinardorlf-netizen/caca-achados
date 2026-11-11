@@ -27,7 +27,6 @@ function texto(o: Oferta, lk: { tg?: string; wa?: string } = {}) {
   const eco = o.preco_de && d ? Number(o.preco_de) - Number(o.preco_por) : 0;
   return [
     `${cabecalho(d)} ${LOJA[o.marketplace] || ""}`.trim(), "",
-    o.est_status === "aprovado" && o.est_texto ? `${o.est_texto}\n` : null,
     `*${curto(o.titulo)}*`, "",
     (o.preco_de && d ? `~De ${brl(Number(o.preco_de))}~\n` : "") + `✅ *Por ${brl(Number(o.preco_por))}*${d ? ` (${d}% OFF)` : ""}`,
     eco > 0 ? `💸 Você economiza ${brl(eco)}` : null,
@@ -52,7 +51,7 @@ async function proximas(dono: string, minDesc: number, qtd: number, maxAfil: num
   const { data } = await db.from("achados_ofertas").select("*").eq("dono", dono).not("link", "is", null).eq("exemplo", false)
     .is("wa_avisado_em", null).in("status", ["nova", "aprovada", "postada"]).or(`validade.is.null,validade.gte.${hoje}`).limit(400);
   const lst = (data || []).filter((o: Oferta) => (descontoDe(o) || 0) >= minDesc && !(o.canais || []).includes("whatsapp") && !(maxAfil && o.afiliados != null && o.afiliados > maxAfil));
-  lst.sort((a: Oferta, b: Oferta) => (b.est_status === "aprovado" ? 1 : 0) - (a.est_status === "aprovado" ? 1 : 0) || (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
+  lst.sort((a: Oferta, b: Oferta) => (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
   return lst.slice(0, qtd);
 }
 
