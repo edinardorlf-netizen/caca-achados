@@ -721,6 +721,14 @@ $("#cp-salvar").onclick = async () => {
     try{ linkFinal = (await chamarML("gerar", { loja:"shopee", url:link }, FN_LINK)).link; }
     catch(err){ $("#cp-msg").textContent = "Não gerei o link de afiliado: "+errMsg(err); return; }
   }
+  if($("#cp-loja").value==="meli" && (!linkFinal || /^https?:\/\/(www\.)?mercadoli[bv]re\.com(\.br)?/i.test(linkFinal)) && !/matt_/i.test(linkFinal||"")){
+    try{
+      const { data: cm, error: em } = await sb.from("achados_config").select("ml_afiliado_query").maybeSingle();
+      if(em || !cm?.ml_afiliado_query) throw new Error("O código de afiliado do Mercado Livre ainda não foi configurado em Ajustes.");
+      const base = linkFinal || "https://www.mercadolivre.com.br/cupons";
+      linkFinal = base + (base.includes("?") ? "&" : "?") + cm.ml_afiliado_query;
+    }catch(err){ $("#cp-msg").textContent = errMsg(err); return; }
+  }
   const { error } = await sb.from("achados_cupons").insert({ dono: await souDono(), loja: $("#cp-loja").value, codigo, regra: $("#cp-regra").value.trim()||null, validade: $("#cp-val").value||null, link: linkFinal||null });
   if(error){ $("#cp-msg").textContent = "Não consegui salvar: "+error.message; return; }
   ["#cp-cod","#cp-regra","#cp-val","#cp-link"].forEach(s=>$(s).value=""); $("#cp-msg").textContent = "Cupom salvo: sai na próxima rodada."; carregarCupons();
