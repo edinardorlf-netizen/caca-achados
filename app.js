@@ -2,7 +2,7 @@
    Fila de promoções de afiliado com posts prontos. Dados no Supabase (só o dono vê). */
 const CFG = window.ACHADOS_CONFIG;
 const sb = supabase.createClient(CFG.url, CFG.key, { auth: { persistSession: true } });
-const FN = `${CFG.url}/functions/v1/achados-ml`, FN_SHP = `${CFG.url}/functions/v1/achados-shopee`, FN_ST = `${CFG.url}/functions/v1/achados-story`, FN_EST = `${CFG.url}/functions/v1/achados-estudio`;
+const FN = `${CFG.url}/functions/v1/achados-ml`, FN_SHP = `${CFG.url}/functions/v1/achados-shopee`, FN_ST = `${CFG.url}/functions/v1/achados-story`, FN_EST = `${CFG.url}/functions/v1/achados-estudio`, FN_LINK = `${CFG.url}/functions/v1/achados-link`;
 
 const MKT = {
   shopee:{nome:"Shopee",cor:"var(--shopee)",
@@ -702,6 +702,15 @@ async function carregarCupons(){
       <div class="row"><button class="btn ghost sm cp-alt" type="button">${c.ativo?"Pausar":"Ativar"}</button><button class="btn ghost sm cp-ap" type="button">Apagar</button></div>
     </div>`; }).join("") : `<p class="hint">Nenhum cupom cadastrado ainda.</p>`;
 }
+$("#cp-gerar").onclick = async () => {
+  const url = $("#cp-link").value.trim();
+  if(!url){ $("#cp-msg").textContent = "Cole no campo o endereço da página do cupom (shopee.com.br)."; return; }
+  if($("#cp-loja").value !== "shopee"){ $("#cp-msg").textContent = "Só a Shopee gera o link sozinha. Nas outras lojas, cole o link gerado no portal de afiliados."; return; }
+  const b=$("#cp-gerar"); b.disabled=true; $("#cp-msg").textContent = "Gerando…";
+  try{ const r = await chamarML("gerar", { loja:"shopee", url }, FN_LINK); $("#cp-link").value = r.link; $("#cp-msg").textContent = "Link de afiliado gerado."; }
+  catch(err){ $("#cp-msg").textContent = errMsg(err); }
+  b.disabled=false;
+};
 $("#cp-salvar").onclick = async () => {
   const codigo = $("#cp-cod").value.trim().toUpperCase();
   if(!codigo){ $("#cp-msg").textContent = "Digite o código do cupom."; return; }
