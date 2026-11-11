@@ -20,20 +20,24 @@ const descontoDe = (o: Oferta) => (o.preco_de && o.preco_por && Number(o.preco_d
 const pontuacao = (o: Oferta) => Math.round((descontoDe(o) || 0) * 1.2 + (o.comissao || 0) * 2 + (o.cupom ? 8 : 0) + (o.ml_posicao ? Math.max(0, 12 - o.ml_posicao) : 0));
 const LOJA: Record<string, string> = { shopee: "na Shopee", meli: "no Mercado Livre", amazon: "na Amazon", tiktok: "no TikTok Shop" };
 
+const curto = (t: string, n = 70) => { const s = String(t || "").replace(/\s+/g, " ").trim(); return s.length <= n ? s : s.slice(0, n).replace(/\s+\S*$/, "") + "…"; };
+const cabecalho = (d: number | null) => (d && d >= 60 ? "🚨 PREÇO ABSURDO" : d && d >= 40 ? "🔥 ACHADÃO" : "🛒 ACHADO");
 function texto(o: Oferta, lk: { tg?: string; wa?: string } = {}) {
   const d = descontoDe(o);
+  const eco = o.preco_de && d ? Number(o.preco_de) - Number(o.preco_por) : 0;
   return [
-    `${d && d >= 40 ? "🔥 ACHADÃO" : "🛒 ACHADO DO DIA"} ${LOJA[o.marketplace] || ""}`.trim(), "",
-    `*${String(o.titulo).slice(0, 160)}*`, "",
+    `${cabecalho(d)} ${LOJA[o.marketplace] || ""}`.trim(), "",
+    `*${curto(o.titulo)}*`, "",
     (o.preco_de && d ? `~De ${brl(Number(o.preco_de))}~\n` : "") + `✅ *Por ${brl(Number(o.preco_por))}*${d ? ` (${d}% OFF)` : ""}`,
+    eco > 0 ? `💸 Você economiza ${brl(eco)}` : null,
     o.cupom ? `🎟️ Cupom: *${o.cupom}*` : null,
     o.nota ? `📌 ${o.nota}` : null, "",
-    `👉 ${o.link}`, "",
-    lk.tg || lk.wa ? "📲 Gostou? Compartilhe e traga seus amigos:" : null,
+    `🛒 Comprar agora com desconto:\n${o.link}`, "",
+    lk.tg || lk.wa ? "💛 Manda pra quem gosta de economizar:" : null,
     lk.wa ? `💬 WhatsApp: ${lk.wa}` : null,
     lk.tg ? `✈️ Telegram: ${lk.tg}` : null,
     lk.tg || lk.wa ? "" : null,
-    "⚠️ Preço e estoque podem mudar a qualquer momento.",
+    "⚠️ Preço pode mudar",
     "_O Cara dos Achados_",
   ].filter((x) => x !== null).join("\n");
 }

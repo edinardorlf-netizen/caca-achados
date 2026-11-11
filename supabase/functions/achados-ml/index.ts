@@ -270,22 +270,26 @@ const descontoDe = (o: any) => (o.preco_de && o.preco_por && Number(o.preco_de) 
 const pontuacao = (o: any) => Math.round((descontoDe(o) || 0) * 1.2 + (o.comissao || 0) * 2 + (o.cupom ? 8 : 0) + (o.ml_posicao ? Math.max(0, 12 - o.ml_posicao) : 0));
 const LOJA: Record<string, string> = { shopee: "na Shopee", meli: "no Mercado Livre", amazon: "na Amazon", tiktok: "no TikTok Shop" };
 
+const curto = (t: string, n = 70) => { const s = String(t || "").replace(/\s+/g, " ").trim(); return s.length <= n ? s : s.slice(0, n).replace(/\s+\S*$/, "") + "…"; };
+const cabecalho = (d: number | null) => (d && d >= 60 ? "🚨 PREÇO ABSURDO" : d && d >= 40 ? "🔥 ACHADÃO" : "🛒 ACHADO");
 // deno-lint-ignore no-explicit-any
 function postTelegram(o: any, lk: { tg?: string; wa?: string } = {}) {
   const d = descontoDe(o);
+  const eco = o.preco_de && d ? Number(o.preco_de) - Number(o.preco_por) : 0;
   const linhas = [
-    `${d && d >= 40 ? "🔥 ACHADÃO" : "🛒 ACHADO DO DIA"} ${LOJA[o.marketplace] || ""}`.trim(), "",
-    `<b>${escHtml(String(o.titulo).slice(0, 200))}</b>`, "",
+    `${cabecalho(d)} ${LOJA[o.marketplace] || ""}`.trim(), "",
+    `<b>${escHtml(curto(o.titulo))}</b>`, "",
     o.preco_de && d ? `<s>De ${brl(Number(o.preco_de))}</s>` : null,
     `✅ <b>Por ${brl(Number(o.preco_por))}</b>${d ? ` (${d}% OFF)` : ""}`,
+    eco > 0 ? `💸 Você economiza ${brl(eco)}` : null,
     o.cupom ? `🎟️ Cupom: <b>${escHtml(o.cupom)}</b>` : null,
     o.nota ? `📌 ${escHtml(o.nota)}` : null, "",
-    `👉 <a href="${escHtml(o.link)}">Pegar a oferta</a>`, "",
-    lk.tg || lk.wa ? "📲 Gostou? Compartilhe e traga seus amigos:" : null,
+    `🛒 <a href="${escHtml(o.link)}">Comprar agora com desconto</a>`, "",
+    lk.tg || lk.wa ? "💛 Manda pra quem gosta de economizar:" : null,
     lk.tg ? `✈️ Telegram: ${escHtml(lk.tg)}` : null,
     lk.wa ? `💬 WhatsApp: ${escHtml(lk.wa)}` : null,
     lk.tg || lk.wa ? "" : null,
-    "⚠️ Preço e estoque podem mudar a qualquer momento.",
+    "⚠️ Preço pode mudar",
     "— O Cara dos Achados",
   ];
   return linhas.filter((x) => x !== null).join("\n");
