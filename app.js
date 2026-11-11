@@ -716,7 +716,12 @@ $("#cp-salvar").onclick = async () => {
   if(!codigo){ $("#cp-msg").textContent = "Digite o código do cupom."; return; }
   const link = $("#cp-link").value.trim();
   if(link && !/^https?:\/\//i.test(link)){ $("#cp-msg").textContent = "O link precisa começar com https://"; return; }
-  const { error } = await sb.from("achados_cupons").insert({ dono: await souDono(), loja: $("#cp-loja").value, codigo, regra: $("#cp-regra").value.trim()||null, validade: $("#cp-val").value||null, link: link||null });
+  let linkFinal = link;
+  if(link && $("#cp-loja").value==="shopee" && /^https?:\/\/(www\.)?shopee\.com\.br/i.test(link)){
+    try{ linkFinal = (await chamarML("gerar", { loja:"shopee", url:link }, FN_LINK)).link; }
+    catch(err){ $("#cp-msg").textContent = "Não gerei o link de afiliado: "+errMsg(err); return; }
+  }
+  const { error } = await sb.from("achados_cupons").insert({ dono: await souDono(), loja: $("#cp-loja").value, codigo, regra: $("#cp-regra").value.trim()||null, validade: $("#cp-val").value||null, link: linkFinal||null });
   if(error){ $("#cp-msg").textContent = "Não consegui salvar: "+error.message; return; }
   ["#cp-cod","#cp-regra","#cp-val","#cp-link"].forEach(s=>$(s).value=""); $("#cp-msg").textContent = "Cupom salvo: sai na próxima rodada."; carregarCupons();
 };

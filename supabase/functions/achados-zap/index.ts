@@ -48,13 +48,13 @@ function textoCupons(cs: Oferta[], lk: { tg?: string; wa?: string } = {}) {
   const unico = links.length === 1 && cs.every((c) => c.link === links[0]);
   const bloco = (c: Oferta) => {
     const val = c.validade ? String(c.validade).split("-").reverse().join("/") : "";
-    return [c.regra || null, `🏷️ Use o CUPOM: *${c.codigo}*`, val ? `📅 Até ${val}` : null, !unico && c.link ? `🔗 ${c.link}` : null].filter((x) => x !== null).join("\n");
+    return [c.regra ? `🎟️ ${c.regra}` : null, `Cupom: *${c.codigo}*`, val ? `📅 Válido até ${val}` : null, !unico && c.link ? `Resgate aqui:\n${c.link}` : null].filter((x) => x !== null).join("\n");
   };
   return [
-    `🎟️💛 ${cs.length > 1 ? "NOVOS CUPONS" : "NOVO CUPOM"} ${cs[0].loja === "meli" ? "no" : "na"} ${loja}!`, "",
-    unico ? `🔗 RESGATE e aplique aqui:\n${links[0]}\n` : null,
+    `🧡 ${cs.length > 1 ? "NOVOS CUPONS" : "NOVO CUPOM"} ${loja}`, "",
     cs.map(bloco).join("\n\n"), "",
-    lk.wa ? `🫶 Convide amigos e familiares para o grupo!\n${lk.wa}\n` : null,
+    unico ? `Resgate aqui:\n${links[0]}\n` : null,
+    lk.wa ? `👊 Convide amigos e familiares para o grupo!\n${lk.wa}\n` : null,
     "⚠️ Sujeito às regras e à disponibilidade da loja",
     "_O Cara dos Achados_",
   ].filter((x) => x !== null).join("\n");
@@ -64,7 +64,7 @@ function textoCupons(cs: Oferta[], lk: { tg?: string; wa?: string } = {}) {
 // e junta todos os cupons válidos da mesma loja.
 async function cupomDaVez(dono: string, lk: { tg?: string; wa?: string }) {
   const hoje = new Date().toISOString().slice(0, 10);
-  const { data } = await db.from("achados_cupons").select("*").eq("dono", dono).eq("ativo", true).or(`validade.is.null,validade.gte.${hoje}`).limit(100);
+  const { data } = await db.from("achados_cupons").select("*").eq("dono", dono).eq("ativo", true).neq("loja", "meli").or(`validade.is.null,validade.gte.${hoje}`).limit(100);
   const limite = Date.now() - 48 * 3600 * 1000;
   const vez = (data || []).filter((c: Oferta) => !c.wa_avisado_em || Date.parse(c.wa_avisado_em) < limite)
     .sort((a: Oferta, b: Oferta) => (a.wa_avisado_em ? Date.parse(a.wa_avisado_em) : 0) - (b.wa_avisado_em ? Date.parse(b.wa_avisado_em) : 0))[0];
