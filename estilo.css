@@ -26,7 +26,8 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:1
 h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance}
 header.top{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
 .marca{display:flex;align-items:center;gap:12px}
-.selo{width:50px;height:50px;border-radius:10px;background:var(--brand-black);border:1px solid var(--line);display:grid;place-items:center;flex:none;overflow:hidden}
+.selo{width:56px;height:56px;border-radius:50%;background:var(--brand-black);display:grid;place-items:center;flex:none;overflow:hidden}
+.selo img{width:100%;height:100%;object-fit:cover;transform:scale(1.04);display:block}
 .selo span{font-family:var(--f-display);font-weight:900;font-stretch:75%;color:var(--yellow);font-size:10.5px;line-height:1;text-align:center}
 .marca h1{font-size:26px;font-weight:900;font-stretch:85%;letter-spacing:-.01em;line-height:1}
 .marca p{margin:2px 0 0;color:var(--ink-2);font-size:13px}

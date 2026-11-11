@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#16140F">
 <meta property="og:title" content="O Cara dos Achados · Achados do dia">
 <meta property="og:description" content="Promoções selecionadas todo dia. Toque e aproveite.">
-<link rel="icon" href="icone.svg" type="image/svg+xml">
+<link rel="icon" href="icone-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icone-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..900&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -37,7 +37,8 @@ a{color:inherit}
 .topo{background:var(--black);color:#fff}
 .topo .in{max-width:1080px;margin:0 auto;padding:22px max(16px,env(safe-area-inset-left,0px)) 20px;display:flex;flex-direction:column;gap:14px}
 .marca{display:flex;align-items:center;gap:14px}
-.selo{width:64px;height:64px;border-radius:14px;background:var(--black);border:2px solid var(--yellow);display:grid;place-items:center;flex:none}
+.selo{width:64px;height:64px;border-radius:50%;background:var(--black);display:grid;place-items:center;flex:none;overflow:hidden}
+.selo img{width:100%;height:100%;object-fit:cover;transform:scale(1.04);display:block}
 .selo span{font-family:var(--f-display);font-weight:900;font-stretch:75%;color:var(--yellow);font-size:13px;line-height:1;text-align:center}
 .marca h1{margin:0;font-family:var(--f-display);font-weight:900;font-stretch:85%;font-size:30px;line-height:1;letter-spacing:-.01em}
 .marca p{margin:4px 0 0;color:#CFC9BB;font-size:14px}
@@ -74,7 +75,7 @@ main{max-width:1080px;margin:0 auto;padding:16px max(16px,env(safe-area-inset-le
 <header class="topo">
   <div class="in">
     <div class="marca">
-      <div class="selo" aria-hidden="true"><span>O CARA<br>DOS<br>ACHADOS</span></div>
+      <div class="selo"><img src="logo.png" alt="O Cara dos Achados" width="64" height="64"></div>
       <div><h1>Achados do dia</h1><p>Promoções selecionadas todo dia. Toque e aproveite antes que acabe.</p></div>
     </div>
     <nav class="canais" id="canais" aria-label="Canais"></nav>
