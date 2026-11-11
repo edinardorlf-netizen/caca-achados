@@ -51,7 +51,7 @@ function textoCupons(cs: Oferta[], lk: { tg?: string; wa?: string } = {}) {
     return [c.regra ? `🎟️ ${c.regra}` : null, `Cupom: *${c.codigo}*`, val ? `📅 Válido até ${val}` : null, !unico && c.link ? `Resgate aqui:\n${c.link}` : null].filter((x) => x !== null).join("\n");
   };
   return [
-    `🧡 ${cs.length > 1 ? "NOVOS CUPONS" : "NOVO CUPOM"} ${loja}`, "",
+    `${cs[0].loja === "meli" ? "💛" : "🧡"} ${cs.length > 1 ? "NOVOS CUPONS" : "NOVO CUPOM"} ${loja}`, "",
     cs.map(bloco).join("\n\n"), "",
     unico ? `Resgate aqui:\n${links[0]}\n` : null,
     lk.wa ? `👊 Convide amigos e familiares para o grupo!\n${lk.wa}\n` : null,
@@ -64,7 +64,7 @@ function textoCupons(cs: Oferta[], lk: { tg?: string; wa?: string } = {}) {
 // e junta todos os cupons válidos da mesma loja.
 async function cupomDaVez(dono: string, lk: { tg?: string; wa?: string }) {
   const hoje = new Date().toISOString().slice(0, 10);
-  const { data } = await db.from("achados_cupons").select("*").eq("dono", dono).eq("ativo", true).neq("loja", "meli").or(`validade.is.null,validade.gte.${hoje}`).limit(100);
+  const { data } = await db.from("achados_cupons").select("*").eq("dono", dono).eq("ativo", true).or(`validade.is.null,validade.gte.${hoje}`).limit(100);
   const limite = Date.now() - 48 * 3600 * 1000;
   const vez = (data || []).filter((c: Oferta) => !c.wa_avisado_em || Date.parse(c.wa_avisado_em) < limite)
     .sort((a: Oferta, b: Oferta) => (a.wa_avisado_em ? Date.parse(a.wa_avisado_em) : 0) - (b.wa_avisado_em ? Date.parse(b.wa_avisado_em) : 0))[0];
