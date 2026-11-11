@@ -626,66 +626,119 @@ $("#ml-buscar").onclick = async () => {
 };
 
 
-// ---------- Estúdio IA ----------
+// ---------- Estúdio IA (independente: usa a tabela est_produtos) ----------
+const EST_ESTILOS = [["achadinho","Achadinho do dia"],["provador","Provador / look do dia"],["unboxing","Unboxing"],["uso","Demonstração de uso"],["review","Review rápido"],["problema","Problema e solução"]];
+const vdFotos = new Map(); // id do produto -> foto do personagem (base64), só na memória
+let estSub = "minerador";
+function estSubMostrar(s){
+  estSub = s;
+  ["minerador","personagem","videos"].forEach(k=>{ $("#es-"+k).hidden = k!==s; document.querySelector(`#est-sub [data-s="${k}"]`).setAttribute("aria-pressed", k===s); });
+  carregarEstudio();
+}
+$("#est-sub").addEventListener("click",(e)=>{ const b=e.target.closest("button[data-s]"); if(b) estSubMostrar(b.dataset.s); });
+const copiarTxt = async (txt) => { try{ await navigator.clipboard.writeText(txt.value); toast("Copiado"); }catch{ txt.select(); toast("Selecionei o texto: copie manualmente"); } };
+
 async function carregarEstudio(){
-  try{
-    const [{ data: c }, { data: ia }] = await Promise.all([ sb.from("achados_config").select("est_persona").maybeSingle(), sb.rpc("achados_ia_status") ]);
-    $("#est-persona").value = c?.est_persona || "";
-    $("#est-ia-status").innerHTML = ia ? `<span class="ponto on"></span> Chave da IA salva: os ganchos são escritos pelo Claude.` : `<span class="ponto"></span> Sem chave: uso modelos de gancho prontos (funciona, só é menos variado).`;
-  }catch{}
-  try{ const { data: c2 } = await sb.from("achados_config").select("afiliados_max").maybeSingle(); $("#est-afil-max").value = c2?.afiliados_max || ""; }catch{}
-  const { data, error } = await sb.from("achados_ofertas").select("id,titulo,marketplace,preco_de,preco_por,imagem,link,est_score,est_motivos,est_texto,est_status,afiliados,est_roteiro")
-    .in("status",["nova","aprovada"]).eq("exemplo",false).not("est_score","is",null).neq("est_status","rejeitado").order("est_score",{ascending:false}).limit(24);
+  if(estSub==="personagem") return carregarPersonagem();
+  if(estSub==="videos") return carregarVideos();
+  const { data, error } = await sb.from("est_produtos").select("id,titulo,imagem,link,preco_por,desconto,comissao,vendas,afiliados,nota,motivos,status")
+    .neq("status","dispensado").order("nota",{ascending:false}).limit(40);
   if(error){ $("#est-lista").innerHTML = `<p class="hint">Não consegui carregar: ${esc(error.message)}</p>`; return; }
-  if(!(data||[]).length){ $("#est-lista").innerHTML = `<p class="hint">Toque em <b>Minerar agora</b> para avaliar as ofertas.</p>`; return; }
-  $("#est-lista").innerHTML = data.map(o=>{
-    const d = o.preco_de && o.preco_por && o.preco_de>o.preco_por ? Math.round((1-o.preco_por/o.preco_de)*100) : null;
-    const st = o.est_status==="aprovado" ? `<span class="chip" aria-pressed="true">Aprovada</span>` : "";
-    return `<div class="card" data-id="${o.id}">
-      <div class="row" style="justify-content:space-between"><b>Nota ${o.est_score}</b>${st}</div>
-      <div>${esc(String(o.titulo).slice(0,90))}</div>
-      <div class="hint">${o.preco_de&&d?`<s>${brl(o.preco_de)}</s> `:""}<b>${brl(o.preco_por)}</b>${d?` · ${d}% OFF`:""} · ${esc(MKT[o.marketplace]?.nome||o.marketplace)}</div>
-      <div class="hint">${esc((o.est_motivos||[]).join(" · "))}</div>
-      <label class="hint">Afiliados no produto (veja na página dele no app da Shopee, "Afiliados Promovidos"): <input class="in est-afil" type="number" min="0" inputmode="numeric" value="${o.afiliados ?? ""}" placeholder="ex.: 190" style="width:90px"></label>
-      <textarea class="in est-txt" rows="9" placeholder="Toque em Gerar roteiro: gancho, falas, chamada, legenda e hashtags para TikTok e Shopee Vídeo">${esc(o.est_roteiro||"")}</textarea>
-      <div class="row"><button class="btn amarelo sm est-roteiro" type="button">${o.est_roteiro?"Gerar de novo":"Gerar roteiro"}</button><button class="btn sm est-salvar-r" type="button">Salvar edição</button><button class="btn sm est-copiar" type="button">Copiar</button><button class="btn ghost sm est-rejeitar" type="button">Dispensar</button></div>
-    </div>`; }).join("");
+  if(!(data||[]).length){ $("#est-lista").innerHTML = `<p class="hint">Toque em <b>Buscar produtos</b> para o Minerador trazer os melhores.</p>`; return; }
+  $("#est-lista").innerHTML = data.map(o=>`<div class="card" data-id="${o.id}">
+      <div class="row" style="flex-wrap:nowrap;align-items:flex-start">
+        <div class="thumb">${o.imagem?`<img src="${esc(o.imagem)}" alt="" loading="lazy">`:""}</div>
+        <div style="min-width:0;flex:1"><div class="row" style="justify-content:space-between"><b>Nota ${o.nota}</b>${o.status==="escolhido"?`<span class="chip" aria-pressed="true">Escolhido</span>`:""}</div>
+        <div>${esc(String(o.titulo).slice(0,90))}</div>
+        <div class="hint"><b>${brl(o.preco_por)}</b>${o.desconto?` · ${o.desconto}% OFF`:""}${o.comissao?` · comissão ${String(o.comissao).replace(".",",")}%`:""}${o.vendas?` · ${o.vendas} vendidos`:""}</div></div>
+      </div>
+      <div class="hint">${esc((o.motivos||[]).join(" · "))}</div>
+      <label class="hint">Afiliados no produto (app da Shopee, "Afiliados Promovidos"): <input class="in est-afil" type="number" min="0" inputmode="numeric" value="${o.afiliados ?? ""}" placeholder="ex.: 190" style="width:90px"></label>
+      <div class="row"><button class="btn amarelo sm est-esc" type="button">${o.status==="escolhido"?"Tirar dos vídeos":"Escolher para vídeo"}</button><button class="btn ghost sm est-disp" type="button">Dispensar</button>${o.link?`<a class="btn ghost sm" href="${esc(o.link)}" target="_blank" rel="noopener">Ver na Shopee</a>`:""}</div>
+    </div>`).join("");
 }
 $("#est-minerar").onclick = async () => {
-  const b=$("#est-minerar"); b.disabled=true; $("#est-msg").textContent="Avaliando…";
-  try{ const r = await chamarML("minerar", {}, FN_EST); $("#est-msg").textContent = `${r.avaliadas} ofertas avaliadas.`; await carregarEstudio(); }
+  const b=$("#est-minerar"); b.disabled=true; $("#est-msg").textContent="Buscando na Shopee…";
+  try{ const r = await chamarML("minerar", {}, FN_EST); $("#est-msg").textContent = `${r.produtos} produtos avaliados.${r.avisos?.length?" "+r.avisos[0]:""}`; await carregarEstudio(); }
   catch(err){ $("#est-msg").textContent = errMsg(err); }
   b.disabled=false;
 };
-$("#est-salvar").onclick = async () => {
-  const chave = $("#est-chave").value.trim();
-  const { error } = await sb.from("achados_config").update({ est_persona: $("#est-persona").value.trim() || null }).eq("dono", await souDono());
-  if(error) return toast("Não consegui salvar: "+error.message);
-  if(chave){ const { error: e2 } = await sb.rpc("achados_salvar_ia", { p_chave: chave }); if(e2) return toast("Não consegui guardar a chave: "+e2.message); $("#est-chave").value=""; }
-  toast("Persona salva"); carregarEstudio();
-};
-$("#est-remover-chave").onclick = async () => { const { error } = await sb.rpc("achados_salvar_ia", { p_chave: "" }); if(error) return toast(error.message); toast("Chave removida"); carregarEstudio(); };
-$("#est-afil-max").onchange = async () => {
-  const v = parseInt($("#est-afil-max").value,10);
-  const { error } = await sb.from("achados_config").update({ afiliados_max: v>0 ? v : null }).eq("dono", await souDono());
-  toast(error ? "Não consegui salvar: "+error.message : (v>0 ? `Só postarei produtos com até ${v} afiliados (quando o número estiver preenchido)` : "Filtro de afiliados desligado"));
-};
 $("#est-lista").addEventListener("change", async (e)=>{
   const inp = e.target.closest(".est-afil"); const card = e.target.closest("[data-id]"); if(!inp || !card) return;
-  try{ await chamarML("afiliados", { id: card.dataset.id, afiliados: inp.value }, FN_EST); toast("Número de afiliados salvo"); }catch(err){ toast(errMsg(err)); }
+  try{ await chamarML("afiliados", { id: card.dataset.id, afiliados: inp.value }, FN_EST); toast("Número de afiliados salvo"); carregarEstudio(); }catch(err){ toast(errMsg(err)); }
 });
 $("#est-lista").addEventListener("click", async (e)=>{
   const bt = e.target.closest("button"); const card = e.target.closest("[data-id]"); if(!bt || !card) return;
-  const id = card.dataset.id, txt = card.querySelector(".est-txt");
+  const id = card.dataset.id; bt.disabled = true;
+  try{
+    if(bt.classList.contains("est-esc")){ await chamarML("status", { id, status: bt.textContent.includes("Tirar")?"novo":"escolhido" }, FN_EST); toast(bt.textContent.includes("Tirar")?"Tirado dos vídeos":"Escolhido: aparece na aba Vídeos"); carregarEstudio(); }
+    else if(bt.classList.contains("est-disp")){ await chamarML("status", { id, status:"dispensado" }, FN_EST); card.remove(); }
+  }catch(err){ toast(errMsg(err)); }
+  bt.disabled = false;
+});
+
+// Personagem
+async function carregarPersonagem(){
+  try{
+    const [{ data: c }, { data: ia }] = await Promise.all([ sb.from("achados_config").select("est_persona,est_personagem").maybeSingle(), sb.rpc("achados_ia_status") ]);
+    $("#est-persona").value = c?.est_persona || ""; $("#est-personagem-txt").value = c?.est_personagem || "";
+    $("#est-ia-status").innerHTML = ia ? `<span class="ponto on"></span> Chave da IA salva: os prompts são escritos pelo Claude.` : `<span class="ponto"></span> Sem chave: uso prompts-modelo prontos (funciona, só é menos variado).`;
+  }catch{}
+}
+$("#est-salvar").onclick = async () => {
+  const chave = $("#est-chave").value.trim();
+  const { error } = await sb.from("achados_config").update({ est_persona: $("#est-persona").value.trim() || null, est_personagem: $("#est-personagem-txt").value.trim() || null }).eq("dono", await souDono());
+  if(error) return toast("Não consegui salvar: "+error.message);
+  if(chave){ const { error: e2 } = await sb.rpc("achados_salvar_ia", { p_chave: chave }); if(e2) return toast("Não consegui guardar a chave: "+e2.message); $("#est-chave").value=""; }
+  toast("Personagem salvo"); carregarPersonagem();
+};
+$("#est-remover-chave").onclick = async () => { const { error } = await sb.rpc("achados_salvar_ia", { p_chave: "" }); if(error) return toast(error.message); toast("Chave removida"); carregarPersonagem(); };
+
+// Vídeos
+async function carregarVideos(){
+  const { data, error } = await sb.from("est_produtos").select("id,titulo,imagem,preco_por,desconto,prompt_foto,prompt_video,video_estilo").eq("status","escolhido").order("nota",{ascending:false}).limit(20);
+  if(error){ $("#vd-lista").innerHTML = `<p class="hint">Não consegui carregar: ${esc(error.message)}</p>`; return; }
+  if(!(data||[]).length){ $("#vd-lista").innerHTML = `<p class="hint">Nenhum produto escolhido ainda. No Minerador, toque em <b>Escolher para vídeo</b>.</p>`; return; }
+  $("#vd-lista").innerHTML = data.map(o=>`<div class="card" data-id="${o.id}">
+      <div class="row" style="flex-wrap:nowrap;align-items:flex-start"><div class="thumb">${o.imagem?`<img src="${esc(o.imagem)}" alt="" loading="lazy">`:""}</div>
+      <div style="min-width:0;flex:1"><div>${esc(String(o.titulo).slice(0,90))}</div><div class="hint"><b>${brl(o.preco_por)}</b>${o.desconto?` · ${o.desconto}% OFF`:""}</div></div></div>
+      <b class="hint">1. Prompt da foto (para o Gemini / Nano Banana)</b>
+      <textarea class="in vd-pf" rows="5" placeholder="Toque em Gerar prompt da foto">${esc(o.prompt_foto||"")}</textarea>
+      <div class="row"><button class="btn sm vd-gerar-foto" type="button">Gerar prompt da foto</button><button class="btn ghost sm vd-copiar-foto" type="button">Copiar</button></div>
+      <b class="hint">2. Foto do personagem com o produto</b>
+      <div class="row"><input class="vd-arq" type="file" accept="image/*"><span class="hint vd-fmsg">${vdFotos.has(o.id)?"Foto carregada.":"Envie a foto pronta."}</span></div>
+      <b class="hint">3. Estilo e prompt da animação (para o Flow / Veo)</b>
+      <select class="in vd-estilo">${EST_ESTILOS.map(([v,n])=>`<option value="${v}"${o.video_estilo===v?" selected":""}>${n}</option>`).join("")}</select>
+      <textarea class="in vd-pv" rows="12" placeholder="Escolha o estilo e toque em Sugerir prompt do vídeo">${esc(o.prompt_video||"")}</textarea>
+      <div class="row"><button class="btn amarelo sm vd-gerar-video" type="button">Sugerir prompt do vídeo</button><button class="btn ghost sm vd-copiar-video" type="button">Copiar</button></div>
+    </div>`).join("");
+}
+// reduz a foto para no máximo 1024 px e devolve JPEG em base64
+async function fotoParaBase64(file){
+  const bmp = await createImageBitmap(file); const k = Math.min(1, 1024/Math.max(bmp.width,bmp.height));
+  const c = document.createElement("canvas"); c.width = Math.round(bmp.width*k); c.height = Math.round(bmp.height*k);
+  c.getContext("2d").drawImage(bmp,0,0,c.width,c.height);
+  return c.toDataURL("image/jpeg",0.85).split(",")[1];
+}
+$("#vd-lista").addEventListener("change", async (e)=>{
+  const inp = e.target.closest(".vd-arq"); const card = e.target.closest("[data-id]"); if(!inp || !card || !inp.files[0]) return;
+  try{ vdFotos.set(card.dataset.id, await fotoParaBase64(inp.files[0])); card.querySelector(".vd-fmsg").textContent = "Foto carregada: a IA vai olhar para ela."; }
+  catch{ card.querySelector(".vd-fmsg").textContent = "Não consegui ler essa imagem."; }
+});
+$("#vd-lista").addEventListener("click", async (e)=>{
+  const bt = e.target.closest("button"); const card = e.target.closest("[data-id]"); if(!bt || !card) return;
+  const id = card.dataset.id;
+  if(bt.classList.contains("vd-copiar-foto")) return copiarTxt(card.querySelector(".vd-pf"));
+  if(bt.classList.contains("vd-copiar-video")) return copiarTxt(card.querySelector(".vd-pv"));
   bt.disabled = true;
   try{
-    if(bt.classList.contains("est-roteiro")){ const r = await chamarML("roteiro", { id }, FN_EST); txt.value = r.texto; if(r.aviso) toast(r.aviso); bt.textContent="Gerar de novo"; }
-    else if(bt.classList.contains("est-salvar-r")){ await chamarML("roteiro_salvar", { id, texto: txt.value }, FN_EST); toast("Roteiro salvo"); }
-    else if(bt.classList.contains("est-copiar")){ try{ await navigator.clipboard.writeText(txt.value); toast("Roteiro copiado"); }catch{ txt.select(); toast("Selecionei o texto: copie manualmente"); } }
-    else if(bt.classList.contains("est-escrever")){ const r = await chamarML("escrever", { id }, FN_EST); txt.value = r.texto; if(r.aviso) toast(r.aviso); bt.textContent="Reescrever"; }
-    else if(bt.classList.contains("est-aprovar")){ if(!txt.value.trim()){ toast("Escreva o gancho antes de aprovar."); } else { await chamarML("aprovar", { id, texto: txt.value }, FN_EST); toast("Aprovada: sai com este gancho nos grupos e no Telegram"); carregarEstudio(); } }
-    else if(bt.classList.contains("est-rejeitar")){ await chamarML("rejeitar", { id }, FN_EST); card.remove(); }
-  }catch(err){ toast(errMsg(err)); }
+    if(bt.classList.contains("vd-gerar-foto")){ const r = await chamarML("prompt_foto", { id }, FN_EST); card.querySelector(".vd-pf").value = r.texto; }
+    else if(bt.classList.contains("vd-gerar-video")){
+      bt.textContent = "Escrevendo…";
+      const r = await chamarML("prompt_video", { id, estilo: card.querySelector(".vd-estilo").value, imagem: vdFotos.get(id) || undefined }, FN_EST);
+      card.querySelector(".vd-pv").value = r.texto; if(r.aviso) toast(r.aviso); bt.textContent = "Sugerir de novo";
+    }
+  }catch(err){ toast(errMsg(err)); if(bt.classList.contains("vd-gerar-video")) bt.textContent="Sugerir prompt do vídeo"; }
   bt.disabled = false;
 });
 

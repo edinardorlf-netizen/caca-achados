@@ -1,13 +1,14 @@
 // =====================================================================
-// Caça Achados · Estúdio IA, etapa 1 (Supabase Edge Function "achados-estudio")
+// Caça Achados · Estúdio IA (Supabase Edge Function "achados-estudio")
 //
-//   POST { acao: "minerar" }              → dá nota (0–100) às ofertas abertas e devolve as melhores
-//   POST { acao: "escrever", id }         → escreve o gancho da oferta no estilo da Persona (Claude, se houver chave; senão modelos prontos)
-//   POST { acao: "aprovar", id, texto? }  → aprova (e salva o texto editado)
-//   POST { acao: "rejeitar", id }
+// Independente do resto do app: tem a própria lista de produtos (tabela est_produtos) e não mexe
+// na fila de ofertas nem nas postagens dos grupos.
 //
-// A IA só escreve o "gancho" (1–2 frases). Título, preços, cupom e links vêm sempre dos dados da oferta,
-// para a IA não inventar preço nem estoque.
+//   POST { acao: "minerar" }                       → busca produtos na Shopee (mais vendidos + palavras) e dá nota
+//   POST { acao: "afiliados", id, afiliados }      → guarda a contagem de afiliados (vista no app da Shopee) e refaz a nota
+//   POST { acao: "status", id, status }            → novo | escolhido | dispensado
+//   POST { acao: "prompt_foto", id }               → prompt para criar a foto do personagem com o produto (Nano Banana)
+//   POST { acao: "prompt_video", id, estilo, imagem? } → prompt de animação com falas (Veo), olhando a foto do personagem se enviada
 // =====================================================================
 import { createClient } from "npm:@supabase/supabase-js@2.49.4";
 
@@ -18,155 +19,178 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
-
-// deno-lint-ignore no-explicit-any
-type Oferta = any;
 const brl = (v: number | null) => (v == null ? "" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
-const descontoDe = (o: Oferta) => (o.preco_de && o.preco_por && Number(o.preco_de) > Number(o.preco_por) ? Math.round((1 - Number(o.preco_por) / Number(o.preco_de)) * 100) : null);
+// deno-lint-ignore no-explicit-any
+type Linha = any;
 
-const PERSONA_PADRAO = "O Cara dos Achados: direto, bem-humorado e brasileiro. Fala como um amigo que avisa de promoção boa. Frases curtas. No máximo 2 emojis. Nunca promete estoque, prazo ou preço futuro.";
+const PERSONA_PADRAO = "O Cara dos Achados: direto, bem-humorado e brasileiro. Fala como um amigo que avisa de promoção boa. Frases curtas. Nunca promete estoque, prazo ou preço futuro.";
 
-// ---------- Minerador ----------
-function nota(o: Oferta): { score: number; motivos: string[] } {
-  const d = descontoDe(o) || 0, motivos: string[] = [];
-  let s = 0;
-  const pd = Math.min(d, 80) * 0.7; s += pd; if (d >= 40) motivos.push(`${d}% de desconto`); else if (d >= 20) motivos.push(`${d}% off`);
-  if (o.comissao) { s += Math.min(Number(o.comissao), 15) * 2; if (Number(o.comissao) >= 8) motivos.push(`comissão ${Number(o.comissao)}%`); }
-  if (o.cupom) { s += 6; motivos.push("tem cupom"); }
-  if (o.ml_posicao) { s += Math.max(0, 12 - Number(o.ml_posicao)); if (Number(o.ml_posicao) <= 5) motivos.push(`top ${o.ml_posicao} mais vendidos`); }
-  const p = Number(o.preco_por) || 0;
-  if (p >= 25 && p <= 250) { s += 8; motivos.push("faixa de preço que converte"); }
-  else if (p > 600) s -= 6; // ticket muito alto vende devagar em canal de ofertas
-  if (o.imagem) s += 4; else { s -= 6; motivos.push("sem foto"); }
-  if (o.afiliados != null) { if (o.afiliados <= 100) { s += 8; motivos.push(`só ${o.afiliados} afiliados`); } else if (o.afiliados <= 300) { s += 4; motivos.push(`${o.afiliados} afiliados`); } else { s -= 8; motivos.push(`${o.afiliados} afiliados (concorrido)`); } }
-  if (!o.link) s -= 30;
-  return { score: Math.max(0, Math.min(100, Math.round(s))), motivos };
+// ---------- Nota ----------
+function nota(p: Linha): { nota: number; motivos: string[] } {
+  const m: string[] = []; let s = 0;
+  const v = Number(p.vendas) || 0;
+  if (v > 0) { s += Math.min(30, Math.log10(v + 1) * 7); if (v >= 1000) m.push(`${v >= 10000 ? "+10 mil" : "+" + Math.floor(v / 1000) + " mil"} vendidos`); }
+  const c = Number(p.comissao) || 0;
+  if (c > 0) { s += Math.min(15, c) * 2; if (c >= 8) m.push(`comissão ${c}%`); }
+  const d = Number(p.desconto) || 0;
+  if (d > 0) { s += Math.min(60, d) * 0.4; if (d >= 30) m.push(`${d}% de desconto`); }
+  const pr = Number(p.preco_por) || 0;
+  if (pr >= 25 && pr <= 250) { s += 8; m.push("faixa de preço que converte"); } else if (pr > 600) s -= 6;
+  if (Number(p.nota_estrelas) >= 4.7) { s += 5; m.push(`${Number(p.nota_estrelas).toFixed(1)} estrelas`); }
+  if (p.imagem) s += 3;
+  if (p.afiliados != null) {
+    if (p.afiliados <= 100) { s += 12; m.push(`só ${p.afiliados} afiliados`); }
+    else if (p.afiliados <= 300) { s += 8; m.push(`${p.afiliados} afiliados`); }
+    else { s -= 10; m.push(`${p.afiliados} afiliados (concorrido)`); }
+  }
+  return { nota: Math.max(0, Math.min(100, Math.round(s))), motivos: m };
 }
+
+// ---------- Shopee ----------
+const API = "https://open-api.affiliate.shopee.com.br/graphql";
+async function sha256(t: string) {
+  const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t));
+  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+// deno-lint-ignore no-explicit-any
+async function gql(appId: string, secret: string, query: string): Promise<any> {
+  const payload = JSON.stringify({ query });
+  const ts = Math.floor(Date.now() / 1000).toString();
+  const r = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `SHA256 Credential=${appId}, Timestamp=${ts}, Signature=${await sha256(appId + ts + payload + secret)}` }, body: payload });
+  const j = await r.json().catch(() => ({}));
+  if (j.errors?.length) { const e = j.errors[0]; throw new Error(`Shopee: ${e.message || "erro"}${e.extensions?.code ? ` (${e.extensions.code})` : ""}`); }
+  if (!r.ok) throw new Error(`Shopee respondeu ${r.status}`);
+  return j.data;
+}
+const CAMPOS = "itemId productName priceMin priceDiscountRate commissionRate imageUrl offerLink productLink sales ratingStar";
 
 async function minerar(dono: string) {
-  const hoje = new Date().toISOString().slice(0, 10);
-  const { data } = await db.from("achados_ofertas").select("*").eq("dono", dono).eq("exemplo", false)
-    .in("status", ["nova", "aprovada"]).or(`validade.is.null,validade.gte.${hoje}`).limit(1000);
-  const lst: Oferta[] = data || [];
-  for (let i = 0; i < lst.length; i += 50) {
-    await Promise.all(lst.slice(i, i + 50).map((o) => {
-      const n = nota(o);
-      return db.from("achados_ofertas").update({ est_score: n.score, est_motivos: n.motivos }).eq("id", o.id).eq("dono", dono);
-    }));
+  const { data: s, error } = await db.rpc("achados_shp_segredo", { p_dono: dono });
+  if (error) throw new Error(`Erro ao ler o cofre: ${error.message}`);
+  const seg = (s || [])[0] || {};
+  if (!seg.app_id || !seg.secret) throw new Error("Falta o AppID ou a Secret da Shopee (em Ajustes).");
+  const { data: cfg } = await db.from("achados_config").select("shp_palavras").eq("dono", dono).maybeSingle();
+  const palavras: string[] = [...(cfg?.shp_palavras || [])].sort(() => Math.random() - 0.5).slice(0, 6);
+  const p0 = 1 + Math.floor(Math.random() * 6);
+  const consultas = [
+    `{productOfferV2(listType: 2, limit: 50, page: 1){nodes{${CAMPOS}}}}`,
+    `{productOfferV2(listType: 2, limit: 50, page: ${p0 + 1}){nodes{${CAMPOS}}}}`,
+    ...palavras.map((k) => `{productOfferV2(keyword: ${JSON.stringify(k)}, sortType: 2, limit: 30, page: 1){nodes{${CAMPOS}}}}`),
+  ];
+  // deno-lint-ignore no-explicit-any
+  const vistos = new Map<string, any>();
+  const avisos: string[] = [];
+  for (const q of consultas) {
+    try {
+      const d = await gql(seg.app_id, seg.secret, q);
+      for (const n of d?.productOfferV2?.nodes || []) if (n?.itemId && n.offerLink && Number(n.priceMin) > 0) vistos.set(String(n.itemId), n);
+    } catch (e) { avisos.push((e as Error).message); if (/AppID|liberou|negado|10020|10031|10035/.test((e as Error).message)) break; }
   }
-  return { avaliadas: lst.length };
-}
-
-// ---------- Persona ----------
-const GANCHOS = {
-  forte: [
-    (o: Oferta, d: number) => `Isso caiu ${d}%. Se estava na sua lista, hoje é o dia.`,
-    (o: Oferta, d: number) => `${d}% de desconto numa coisa que muita gente usa todo dia.`,
-    (o: Oferta, d: number) => `Olha a diferença de preço: dá pra economizar ${brl(Number(o.preco_de) - Number(o.preco_por))} aqui.`,
-  ],
-  medio: [
-    (o: Oferta, d: number) => `Preço bom (${d}% abaixo). Vale conferir.`,
-    (o: Oferta, d: number) => `Achei esse com ${d}% de desconto. Compara e decide.`,
-    (o: Oferta, _d: number) => `Caiu pra ${brl(Number(o.preco_por))}. Fica o aviso.`,
-  ],
-  simples: [
-    (o: Oferta, _d: number) => `Achado do dia por ${brl(Number(o.preco_por))}.`,
-    (o: Oferta, _d: number) => `Dica rápida: tá ${brl(Number(o.preco_por))} agora.`,
-  ],
-};
-function ganchoModelo(o: Oferta): string {
-  const d = descontoDe(o) || 0;
-  const grupo = d >= 40 ? GANCHOS.forte : d >= 15 ? GANCHOS.medio : GANCHOS.simples;
-  const i = Math.abs([...String(o.id)].reduce((a, c) => a + c.charCodeAt(0), 0)) % grupo.length;
-  return grupo[i](o, d);
-}
-
-async function ganchoIA(o: Oferta, persona: string, chave: string): Promise<string> {
-  const d = descontoDe(o);
-  const dados = [
-    `Produto: ${String(o.titulo).slice(0, 160)}`, `Loja: ${o.marketplace}`,
-    o.preco_de && d ? `Preço antigo: ${brl(Number(o.preco_de))}` : null, `Preço atual: ${brl(Number(o.preco_por))}`, d ? `Desconto: ${d}%` : null,
-    o.cupom ? `Cupom: ${o.cupom}` : null, o.nota ? `Observação: ${o.nota}` : null,
-  ].filter(Boolean).join("\n");
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-api-key": chave, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({
-      model: "claude-haiku-5-5", max_tokens: 200,
-      system: `Você escreve o gancho de uma oferta para WhatsApp e Telegram.\nPersona: ${persona}\nRegras: escreva só 1 ou 2 frases curtas em português do Brasil (máximo 180 caracteres no total). Use apenas os dados fornecidos: nunca invente preço, estoque, prazo, avaliação ou marca. Não repita o título nem coloque links. Responda só com o texto do gancho, sem aspas.`,
-      messages: [{ role: "user", content: dados }],
-    }),
+  const { data: antigos } = await db.from("est_produtos").select("item_id,afiliados,status").eq("dono", dono).eq("origem", "shopee").in("item_id", [...vistos.keys()]);
+  const ja = new Map((antigos || []).map((a: Linha) => [a.item_id, a]));
+  const linhas = [...vistos.values()].map((n) => {
+    const antigo = ja.get(String(n.itemId));
+    const base = {
+      dono, origem: "shopee", item_id: String(n.itemId), titulo: String(n.productName).slice(0, 300), imagem: n.imageUrl || null, link: n.offerLink,
+      preco_por: Number(n.priceMin), desconto: Math.round(Number(n.priceDiscountRate || 0)), comissao: Math.round(Number(n.commissionRate || 0) * 1000) / 10,
+      vendas: Math.round(Number(n.sales || 0)), nota_estrelas: n.ratingStar != null ? Number(n.ratingStar) : null, afiliados: antigo?.afiliados ?? null,
+    };
+    const nt = nota(base);
+    return { ...base, nota: nt.nota, motivos: nt.motivos, ...(antigo ? {} : { status: "novo" }) };
   });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(`A IA recusou: ${j?.error?.message || `erro ${r.status}`}`);
-  const t = String(j?.content?.[0]?.text || "").replace(/^["“]|["”]$/g, "").trim();
-  if (!t) throw new Error("A IA devolveu um texto vazio.");
-  return t.slice(0, 220);
+  for (let i = 0; i < linhas.length; i += 100) {
+    const { error: e2 } = await db.from("est_produtos").upsert(linhas.slice(i, i + 100), { onConflict: "dono,origem,item_id" });
+    if (e2) throw new Error(`Erro ao salvar: ${e2.message}`);
+  }
+  return { produtos: linhas.length, avisos };
 }
 
-async function escrever(dono: string, id: string) {
-  const { data: o } = await db.from("achados_ofertas").select("*").eq("dono", dono).eq("id", id).maybeSingle();
-  if (!o) throw new Error("Oferta não encontrada.");
-  const { data: c } = await db.from("achados_config").select("est_persona").eq("dono", dono).maybeSingle();
-  const persona = (c?.est_persona || "").trim() || PERSONA_PADRAO;
-  const { data: seg } = await db.from("segredos").select("valor").eq("chave", "anthropic").maybeSingle();
-  let texto: string, origem: "ia" | "modelo" = "modelo", aviso = "";
-  if (seg?.valor) {
-    try { texto = await ganchoIA(o, persona, seg.valor); origem = "ia"; }
-    catch (e) { texto = ganchoModelo(o); aviso = (e as Error).message; }
-  } else { texto = ganchoModelo(o); aviso = "Sem chave da IA: usei um modelo pronto."; }
-  await db.from("achados_ofertas").update({ est_texto: texto, est_status: "pendente", est_em: new Date().toISOString() }).eq("id", id).eq("dono", dono);
-  return { texto, origem, aviso };
+// ---------- Prompts ----------
+const ESTILOS: Record<string, { nome: string; ideia: string }> = {
+  provador: { nome: "Provador / look do dia", ideia: "A personagem usa a peça e gira mostrando caimento e detalhes, falando de como valoriza." },
+  unboxing: { nome: "Unboxing", ideia: "A personagem abre a caixa e mostra o produto pela primeira vez, reagindo ao que vê." },
+  uso: { nome: "Demonstração de uso", ideia: "A personagem usa o produto no dia a dia e mostra como funciona, passo a passo." },
+  review: { nome: "Review rápido", ideia: "Falando direto para a câmera, a personagem dá 3 motivos para gostar do produto." },
+  achadinho: { nome: "Achadinho do dia", ideia: "Fala animada, mostrando o produto e o preço, como quem avisa um amigo de uma promoção." },
+  problema: { nome: "Problema e solução", ideia: "Mostra uma situação comum do dia a dia e o produto resolvendo, sem exagerar." },
+};
+
+async function chaveIA() { const { data } = await db.from("segredos").select("valor").eq("chave", "anthropic").maybeSingle(); return data?.valor as string | undefined; }
+async function persona(dono: string) {
+  const { data } = await db.from("achados_config").select("est_persona,est_personagem").eq("dono", dono).maybeSingle();
+  return { fala: (data?.est_persona || "").trim() || PERSONA_PADRAO, visual: (data?.est_personagem || "").trim() };
+}
+function dadosProduto(p: Linha) {
+  return [`Produto: ${String(p.titulo).slice(0, 160)}`, `Preço atual: ${brl(Number(p.preco_por))}`, p.desconto ? `Desconto: ${p.desconto}%` : null].filter(Boolean).join("\n");
 }
 
-// ---------- Roteiro de vídeo (TikTok e Shopee Vídeo) ----------
-function roteiroModelo(o: Oferta): string {
-  const d = descontoDe(o), eco = o.preco_de && d ? Number(o.preco_de) - Number(o.preco_por) : 0;
-  const nome = String(o.titulo).replace(/\s+/g, " ").slice(0, 60);
+function promptFoto(p: Linha, visual: string) {
+  const nome = String(p.titulo).replace(/\s+/g, " ").slice(0, 100);
   return [
-    "🎬 GANCHO (0–3 s)", d ? `Para tudo: ${nome} com ${d}% de desconto.` : `Olha esse achado: ${nome}.`, "",
-    "🗣️ DESENVOLVIMENTO (3–15 s)", `Mostre o produto de perto. Preço de hoje: ${brl(Number(o.preco_por))}${eco > 0 ? `, ${brl(eco)} mais barato que o preço antigo` : ""}.${o.cupom ? ` Use o cupom ${o.cupom}.` : ""}`, "",
-    "👉 CHAMADA (15–20 s)", "TikTok: link no meu perfil. Shopee Vídeo: toque no produto aqui embaixo. O preço pode mudar, então corre.", "",
-    "📝 LEGENDA", `${d ? `${d}% OFF` : "Achado"}: ${nome}. Por ${brl(Number(o.preco_por))}. Preço pode mudar.`, "",
-    "#achados #promoção #ofertas #desconto #shopee",
+    "Use a imagem de referência anexa do meu personagem e a foto do produto.",
+    `Crie uma foto realista, vertical (9:16), do MESMO personagem${visual ? ` (${visual})` : ""} usando, segurando ou mostrando este produto: ${nome}.`,
+    "O produto deve ficar idêntico à foto do produto anexa: mesma cor, forma e detalhes, bem visível e em destaque.",
+    "Mantenha o rosto, o cabelo e o estilo do personagem iguais à referência.",
+    "Ambiente natural e coerente com o uso do produto, luz suave de dia, expressão simpática, olhando para a câmera.",
+    "Sem texto, sem logotipos, sem marca d'água e sem mãos ou dedos deformados.",
   ].join("\n");
 }
 
-async function roteiroIA(o: Oferta, persona: string, chave: string): Promise<string> {
-  const d = descontoDe(o);
-  const dados = [
-    `Produto: ${String(o.titulo).slice(0, 160)}`, `Loja: ${o.marketplace}`,
-    o.preco_de && d ? `Preço antigo: ${brl(Number(o.preco_de))}` : null, `Preço atual: ${brl(Number(o.preco_por))}`, d ? `Desconto: ${d}%` : null,
-    o.cupom ? `Cupom: ${o.cupom}` : null, o.nota ? `Observação: ${o.nota}` : null,
-  ].filter(Boolean).join("\n");
+function promptVideoModelo(p: Linha, e: { nome: string; ideia: string }, visual: string) {
+  const nome = String(p.titulo).replace(/\s+/g, " ").slice(0, 70);
+  return [
+    `Estilo: ${e.nome}. ${e.ideia}`, "",
+    "CLIPE 1 (8 s)",
+    `Cena: ${visual || "a personagem da foto"} em ambiente natural, segurando/usando ${nome}. O produto idêntico à foto.`,
+    "Câmera: plano médio, vertical 9:16, leve movimento para a frente.",
+    `Fala (pt-BR): "Olha o que eu achei hoje! ${p.desconto ? `Está com ${p.desconto}% de desconto` : "Achado do dia"}, por ${brl(Number(p.preco_por))}."`,
+    "Áudio: voz natural, som ambiente baixo, sem música alta.", "",
+    "CLIPE 2 (8 s)",
+    "Cena: close no produto e no rosto sorrindo, mostrando um detalhe.",
+    'Fala (pt-BR): "Vale conferir o link. O preço pode mudar, então corre!"',
+  ].join("\n");
+}
+
+// deno-lint-ignore no-explicit-any
+async function claude(chave: string, system: string, content: any[], maxTokens = 1200): Promise<string> {
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": chave, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({
-      model: "claude-haiku-5-5", max_tokens: 700,
-      system: `Você escreve roteiros de vídeo curto (20 a 30 segundos) de ofertas para TikTok e Shopee Vídeo, em português do Brasil.\nPersona: ${persona}\nFormato exato, com estes títulos:\n🎬 GANCHO (0–3 s)\n🗣️ DESENVOLVIMENTO (3–15 s)\n👉 CHAMADA (15–20 s)\n📝 LEGENDA\n#hashtags (5 a 8, na última linha)\nRegras: use apenas os dados fornecidos; nunca invente preço, estoque, avaliação, marca, prazo ou benefício do produto; não prometa resultado nem faça alegação de saúde; sem "o mais vendido" ou "últimas unidades". Na chamada, diga "link no meu perfil" (TikTok) e "toque no produto aqui embaixo" (Shopee Vídeo) e avise que o preço pode mudar. Frases curtas, para falar em voz alta. Legenda com até 150 caracteres. Responda só com o roteiro.`,
-      messages: [{ role: "user", content: dados }],
-    }),
+    body: JSON.stringify({ model: "claude-haiku-5-5", max_tokens: maxTokens, system, messages: [{ role: "user", content }] }),
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(`A IA recusou: ${j?.error?.message || `erro ${r.status}`}`);
   const t = String(j?.content?.[0]?.text || "").trim();
   if (!t) throw new Error("A IA devolveu um texto vazio.");
-  return t.slice(0, 1800);
+  return t.slice(0, 3000);
 }
 
-async function roteiro(dono: string, id: string) {
-  const { data: o } = await db.from("achados_ofertas").select("*").eq("dono", dono).eq("id", id).maybeSingle();
-  if (!o) throw new Error("Oferta não encontrada.");
-  const { data: c } = await db.from("achados_config").select("est_persona").eq("dono", dono).maybeSingle();
-  const persona = (c?.est_persona || "").trim() || PERSONA_PADRAO;
-  const { data: seg } = await db.from("segredos").select("valor").eq("chave", "anthropic").maybeSingle();
+async function promptVideo(dono: string, p: Linha, estiloId: string, imagem?: string) {
+  const e = ESTILOS[estiloId] || ESTILOS.achadinho;
+  const pe = await persona(dono);
+  const chave = await chaveIA();
   let texto: string, origem: "ia" | "modelo" = "modelo", aviso = "";
-  if (seg?.valor) {
-    try { texto = await roteiroIA(o, persona, seg.valor); origem = "ia"; }
-    catch (e) { texto = roteiroModelo(o); aviso = (e as Error).message; }
-  } else { texto = roteiroModelo(o); aviso = "Sem chave da IA: usei um roteiro pronto."; }
-  await db.from("achados_ofertas").update({ est_roteiro: texto, est_em: new Date().toISOString() }).eq("id", id).eq("dono", dono);
+  if (chave) {
+    try {
+      const sistema = `Você escreve prompts para o Veo (gerador de vídeo do Google) para vídeos curtos de afiliado, em português do Brasil.
+Personagem (visual): ${pe.visual || "veja a foto enviada"}.
+Voz e jeito de falar: ${pe.fala}
+Estilo do vídeo: ${e.nome}. ${e.ideia}
+Entregue de 2 a 3 clipes de 8 segundos, cada um neste formato:
+CLIPE N (8 s)
+Cena: o que aparece (personagem, ambiente, produto)
+Câmera: enquadramento e movimento
+Ação: o que a personagem faz
+Fala (pt-BR): uma fala natural entre aspas, no máximo 20 palavras, que valorize o produto (como ele valoriza quem usa, o que chama atenção)
+Áudio: voz e som ambiente
+Regras: use a foto enviada (se houver) como referência fiel da personagem e do produto; o produto deve aparecer exatamente como na foto. Use só os dados fornecidos: nunca invente preço, estoque, avaliação, marca, material, tamanho ou prazo; não faça promessa de resultado nem alegação de saúde; não diga "mais vendido" nem "últimas unidades". No último clipe, chame para ver o link e avise que o preço pode mudar. Sem texto na tela e sem logotipos. Responda só com os clipes.`;
+      const conteudo = [];
+      if (imagem) conteudo.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: imagem } });
+      conteudo.push({ type: "text", text: dadosProduto(p) });
+      texto = await claude(chave, sistema, conteudo); origem = "ia";
+    } catch (err) { texto = promptVideoModelo(p, e, pe.visual); aviso = (err as Error).message; }
+  } else { texto = promptVideoModelo(p, e, pe.visual); aviso = "Sem chave da IA: usei um prompt-modelo."; }
+  await db.from("est_produtos").update({ prompt_video: texto, video_estilo: estiloId }).eq("id", p.id).eq("dono", dono);
   return { texto, origem, aviso };
 }
 
@@ -181,24 +205,31 @@ Deno.serve(async (req) => {
     if (!dono) return json({ erro: "Seu acesso ao Caça Achados não está liberado." }, 403);
 
     const b = await req.json().catch(() => ({}));
-    const id = String(b.id || "");
     if (b.acao === "minerar") return json(await minerar(email));
-    if (b.acao === "escrever") return json(await escrever(email, id));
-    if (b.acao === "roteiro") return json(await roteiro(email, id));
-    if (b.acao === "roteiro_salvar") { await db.from("achados_ofertas").update({ est_roteiro: String(b.texto || "").slice(0, 1800) }).eq("id", id).eq("dono", email); return json({ ok: true }); }
-    if (b.acao === "aprovar") {
-      const patch: Record<string, unknown> = { est_status: "aprovado", est_em: new Date().toISOString() };
-      if (typeof b.texto === "string") patch.est_texto = b.texto.replace(/\s+/g, " ").trim().slice(0, 220);
-      await db.from("achados_ofertas").update(patch).eq("id", id).eq("dono", email);
-      return json({ ok: true });
-    }
+    const id = String(b.id || "");
+    const { data: p } = await db.from("est_produtos").select("*").eq("dono", email).eq("id", id).maybeSingle();
+    if (!p) return json({ erro: "Produto não encontrado." }, 404);
     if (b.acao === "afiliados") {
       const n = b.afiliados === "" || b.afiliados == null ? null : Math.max(0, Math.min(1000000, Math.round(Number(b.afiliados))));
       if (n !== null && !Number.isFinite(n)) return json({ erro: "Número inválido." }, 400);
-      await db.from("achados_ofertas").update({ afiliados: n }).eq("id", id).eq("dono", email);
+      const nt = nota({ ...p, afiliados: n });
+      await db.from("est_produtos").update({ afiliados: n, nota: nt.nota, motivos: nt.motivos }).eq("id", id).eq("dono", email);
+      return json({ ok: true, nota: nt.nota });
+    }
+    if (b.acao === "status") {
+      if (!["novo", "escolhido", "dispensado"].includes(b.status)) return json({ erro: "Status inválido." }, 400);
+      await db.from("est_produtos").update({ status: b.status }).eq("id", id).eq("dono", email);
       return json({ ok: true });
     }
-    if (b.acao === "rejeitar") { await db.from("achados_ofertas").update({ est_status: "rejeitado", est_em: new Date().toISOString() }).eq("id", id).eq("dono", email); return json({ ok: true }); }
+    if (b.acao === "prompt_foto") {
+      const texto = promptFoto(p, (await persona(email)).visual);
+      await db.from("est_produtos").update({ prompt_foto: texto }).eq("id", id).eq("dono", email);
+      return json({ texto });
+    }
+    if (b.acao === "prompt_video") {
+      const img = typeof b.imagem === "string" && b.imagem.length < 4_000_000 ? b.imagem.replace(/^data:image\/\w+;base64,/, "") : undefined;
+      return json(await promptVideo(email, p, String(b.estilo || "achadinho"), img));
+    }
     return json({ erro: "Ação desconhecida." }, 400);
   } catch (e) {
     return json({ erro: String((e as Error).message || e) }, 500);

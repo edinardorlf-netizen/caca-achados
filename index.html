@@ -331,28 +331,51 @@
 
   <!-- ESTÚDIO IA -->
   <section id="v-estudio" hidden>
-    <div class="layout">
+    <div class="row" id="est-sub" role="group" aria-label="Estúdio IA">
+      <button class="chip" type="button" data-s="minerador" aria-pressed="true">Minerador de produtos</button>
+      <button class="chip" type="button" data-s="personagem" aria-pressed="false">Personagem</button>
+      <button class="chip" type="button" data-s="videos" aria-pressed="false">Vídeos</button>
+    </div>
+
+    <!-- Minerador -->
+    <div id="es-minerador">
       <div class="card">
-        <h2>Minerador</h2>
-        <p class="hint">Dá uma nota de 0 a 100 para cada oferta aberta (desconto, comissão, cupom, posição entre os mais vendidos, faixa de preço e foto) e mostra as melhores. Em cada uma, toque em Gerar roteiro para receber o roteiro do vídeo (TikTok e Shopee Vídeo), a legenda e as hashtags.</p>
-        <div class="row"><button class="btn amarelo" id="est-minerar" type="button">Minerar agora</button><span class="hint" id="est-msg"></span></div>
-        <label class="hint">Filtro de afiliados: só postar produtos com até <input class="in" id="est-afil-max" type="number" min="0" inputmode="numeric" placeholder="ex.: 300" style="width:90px"> afiliados (vazio = sem filtro)</label>
+        <h2>Minerador de produtos</h2>
+        <p class="hint">Busca na Shopee os produtos que mais vendem e dá uma nota de 0 a 100 (vendas, comissão, desconto, faixa de preço, estrelas e poucos afiliados). Esta lista é só do Estúdio: não mexe na fila de ofertas nem nos grupos.</p>
+        <div class="row"><button class="btn amarelo" id="est-minerar" type="button">Buscar produtos</button><span class="hint" id="est-msg"></span></div>
+        <p class="hint">Para filtrar por afiliados: abra o produto no app da Shopee, veja "Afiliados Promovidos" e digite o número no cartão. Com até 300 afiliados a nota sobe; acima disso, desce.</p>
       </div>
+      <div id="est-lista" class="layout"></div>
+    </div>
+
+    <!-- Personagem -->
+    <div id="es-personagem" hidden>
       <div class="card">
-        <h2>Persona</h2>
-        <p class="hint">Como o <b>Cara dos Achados</b> fala. A IA escreve só o gancho (1 ou 2 frases) de cada oferta; título, preços, cupom e links vêm sempre dos dados reais.</p>
-        <label class="f" for="est-persona">Jeito de falar
-          <textarea class="in" id="est-persona" rows="3" placeholder="Ex.: direto, bem-humorado e brasileiro; frases curtas; no máximo 2 emojis."></textarea>
+        <h2>Criar o personagem</h2>
+        <p class="hint">O personagem e as imagens são criados no Google, onde combinamos: o Nano Banana (no app Gemini) faz as imagens e o Veo (no Flow) faz os vídeos. Crie o personagem uma vez, salve a imagem de referência e descreva aqui como ele é.</p>
+        <div class="row"><a class="btn" href="https://gemini.google.com/app" target="_blank" rel="noopener">Abrir o Gemini (imagens)</a><a class="btn ghost" href="https://labs.google/fx/tools/flow" target="_blank" rel="noopener">Abrir o Flow (vídeos)</a></div>
+        <label class="f" for="est-personagem-txt">Como o personagem é (visual)
+          <textarea class="in" id="est-personagem-txt" rows="3" placeholder="Ex.: mulher de 28 anos, cabelo cacheado, sorriso simpático, estilo casual, camiseta preta com detalhes amarelos"></textarea>
+        </label>
+        <label class="f" for="est-persona">Jeito de falar (voz)
+          <textarea class="in" id="est-persona" rows="3" placeholder="Ex.: direto, bem-humorado e brasileiro; frases curtas; fala como um amigo que avisa de promoção."></textarea>
         </label>
         <label class="f" for="est-chave">Chave da IA (Claude), opcional
-          <input class="in" id="est-chave" type="password" autocomplete="off" placeholder="Cole aqui para usar a IA; vazio mantém a atual">
+          <input class="in" id="est-chave" type="password" autocomplete="off" placeholder="Cole aqui para a IA escrever os prompts; vazio mantém a atual">
         </label>
         <p class="hint" id="est-ia-status"></p>
         <div class="row"><button class="btn" id="est-salvar" type="button">Salvar</button><button class="btn ghost sm" id="est-remover-chave" type="button">Remover chave</button></div>
       </div>
     </div>
-    <h2 style="font-size:16px;margin:18px 0 10px">Melhores achados para aprovar</h2>
-    <div id="est-lista" class="layout"></div>
+
+    <!-- Vídeos -->
+    <div id="es-videos" hidden>
+      <div class="card">
+        <h2>Vídeos</h2>
+        <p class="hint">Para cada produto escolhido no Minerador: 1) copie o prompt da foto e crie, no Gemini, a foto do personagem com o produto; 2) envie a foto aqui; 3) escolha o estilo e receba o prompt de animação, com as falas, para colar no Flow.</p>
+      </div>
+      <div id="vd-lista" class="layout"></div>
+    </div>
   </section>
 
   <!-- POSTADAS -->
