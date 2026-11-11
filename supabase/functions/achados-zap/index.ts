@@ -42,31 +42,35 @@ function texto(o: Oferta, lk: { tg?: string; wa?: string } = {}) {
   ].filter((x) => x !== null).join("\n");
 }
 
-function textoCupom(c: Oferta, lk: { tg?: string; wa?: string } = {}) {
-  const val = c.validade ? String(c.validade).split("-").reverse().join("/") : "";
+function textoCupons(cs: Oferta[], lk: { tg?: string; wa?: string } = {}) {
+  const loja = (LOJA[cs[0].loja] || cs[0].loja || "").replace(/^n[oa] /, "").toUpperCase();
+  const links = [...new Set(cs.map((c) => c.link).filter(Boolean))];
+  const unico = links.length === 1 && cs.every((c) => c.link === links[0]);
+  const bloco = (c: Oferta) => {
+    const val = c.validade ? String(c.validade).split("-").reverse().join("/") : "";
+    return [c.regra || null, `🏷️ Use o CUPOM: *${c.codigo}*`, val ? `📅 Até ${val}` : null, !unico && c.link ? `🔗 ${c.link}` : null].filter((x) => x !== null).join("\n");
+  };
   return [
-    `🎁 BÔNUS DO GRUPO · CUPOM ${(LOJA[c.loja] || c.loja || "").replace(/^n[oa] /, "").toUpperCase()}`.trim(), "",
-    `🎟️ Cupom: *${c.codigo}*`,
-    c.regra ? `📋 ${c.regra}` : null,
-    val ? `📅 Válido até ${val}` : null,
-    c.link ? `\n👉 Aproveite aqui:\n${c.link}` : null, "",
-    lk.wa ? "💛 Manda pra quem gosta de economizar:" : null,
-    lk.wa ? `💬 ${lk.wa}` : null,
-    lk.wa ? "" : null,
+    `🎟️💛 ${cs.length > 1 ? "NOVOS CUPONS" : "NOVO CUPOM"} ${cs[0].loja === "meli" ? "no" : "na"} ${loja}!`, "",
+    unico ? `🔗 RESGATE e aplique aqui:\n${links[0]}\n` : null,
+    cs.map(bloco).join("\n\n"), "",
+    lk.wa ? `🫶 Convide amigos e familiares para o grupo!\n${lk.wa}\n` : null,
     "⚠️ Sujeito às regras e à disponibilidade da loja",
     "_O Cara dos Achados_",
   ].filter((x) => x !== null).join("\n");
 }
 
-// Um cupom por rodada: o que nunca saiu, ou o que saiu há mais de 2 dias e ainda vale.
+// Uma mensagem de cupons por rodada: pega o cupom que está há mais tempo sem sair (ou nunca saiu, ou saiu há +2 dias)
+// e junta todos os cupons válidos da mesma loja.
 async function cupomDaVez(dono: string, lk: { tg?: string; wa?: string }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const { data } = await db.from("achados_cupons").select("*").eq("dono", dono).eq("ativo", true).or(`validade.is.null,validade.gte.${hoje}`).limit(100);
   const limite = Date.now() - 48 * 3600 * 1000;
-  const lst = (data || []).filter((c: Oferta) => !c.wa_avisado_em || Date.parse(c.wa_avisado_em) < limite);
-  lst.sort((a: Oferta, b: Oferta) => (a.wa_avisado_em ? Date.parse(a.wa_avisado_em) : 0) - (b.wa_avisado_em ? Date.parse(b.wa_avisado_em) : 0));
-  const c = lst[0];
-  return c ? { id: `c:${c.id}`, texto: textoCupom(c, lk), imagem: null } : null;
+  const vez = (data || []).filter((c: Oferta) => !c.wa_avisado_em || Date.parse(c.wa_avisado_em) < limite)
+    .sort((a: Oferta, b: Oferta) => (a.wa_avisado_em ? Date.parse(a.wa_avisado_em) : 0) - (b.wa_avisado_em ? Date.parse(b.wa_avisado_em) : 0))[0];
+  if (!vez) return null;
+  const grupo = (data || []).filter((c: Oferta) => c.loja === vez.loja).slice(0, 6);
+  return { id: `c:${grupo.map((c: Oferta) => c.id).join(",")}`, texto: textoCupons(grupo, lk), imagem: null };
 }
 
 function horaSP() {
@@ -115,7 +119,7 @@ Deno.serve(async (req) => {
       const ids: string[] = Array.isArray(body.ids) ? body.ids.map(String).slice(0, 50) : [];
       const agora = new Date().toISOString();
       for (const id of ids) {
-        if (id.startsWith("c:")) { await db.from("achados_cupons").update({ wa_avisado_em: agora }).eq("id", id.slice(2)).eq("dono", c.dono); continue; }
+        if (id.startsWith("c:")) { await db.from("achados_cupons").update({ wa_avisado_em: agora }).in("id", id.slice(2).split(",")).eq("dono", c.dono); continue; }
         const { data: o } = await db.from("achados_ofertas").select("canais").eq("id", id).eq("dono", c.dono).maybeSingle();
         if (!o) continue;
         await db.from("achados_ofertas").update({ wa_avisado_em: agora, canais: [...new Set([...(o.canais || []), "whatsapp"])] }).eq("id", id).eq("dono", c.dono);
