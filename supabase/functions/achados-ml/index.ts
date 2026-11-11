@@ -271,7 +271,7 @@ const pontuacao = (o: any) => Math.round((descontoDe(o) || 0) * 1.2 + (o.comissa
 const LOJA: Record<string, string> = { shopee: "na Shopee", meli: "no Mercado Livre", amazon: "na Amazon", tiktok: "no TikTok Shop" };
 
 // deno-lint-ignore no-explicit-any
-function postTelegram(o: any) {
+function postTelegram(o: any, lk: { tg?: string; wa?: string } = {}) {
   const d = descontoDe(o);
   const linhas = [
     `${d && d >= 40 ? "🔥 ACHADÃO" : "🛒 ACHADO DO DIA"} ${LOJA[o.marketplace] || ""}`.trim(), "",
@@ -281,6 +281,10 @@ function postTelegram(o: any) {
     o.cupom ? `🎟️ Cupom: <b>${escHtml(o.cupom)}</b>` : null,
     o.nota ? `📌 ${escHtml(o.nota)}` : null, "",
     `👉 <a href="${escHtml(o.link)}">Pegar a oferta</a>`, "",
+    lk.tg || lk.wa ? "📲 Gostou? Compartilhe e traga seus amigos:" : null,
+    lk.tg ? `✈️ Telegram: ${escHtml(lk.tg)}` : null,
+    lk.wa ? `💬 WhatsApp: ${escHtml(lk.wa)}` : null,
+    lk.tg || lk.wa ? "" : null,
     "⚠️ Preço e estoque podem mudar a qualquer momento.",
     "— O Cara dos Achados",
   ];
@@ -306,7 +310,8 @@ async function configTg(dono: string) {
 
 // deno-lint-ignore no-explicit-any
 async function enviarOferta(dono: string, token: string, chat: string, o: any) {
-  const texto = postTelegram(o);
+  const { data: lc } = await db.from("achados_config").select("vit_telegram,vit_whatsapp").eq("dono", dono).maybeSingle();
+  const texto = postTelegram(o, { tg: lc?.vit_telegram || undefined, wa: lc?.vit_whatsapp || undefined });
   try {
     if (o.imagem && texto.length <= 1024) await tg(token, "sendPhoto", { chat_id: chat, photo: o.imagem, caption: texto, parse_mode: "HTML" });
     else throw new Error("sem foto");

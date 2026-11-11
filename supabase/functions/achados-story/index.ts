@@ -226,7 +226,7 @@ async function alertasAgendados() {
 // te manda (no particular do Telegram) a oferta da vez com um botão que abre o WhatsApp com o texto
 // pronto: você só escolhe o grupo/canal e envia.
 const LOJA_WA: Record<string, string> = { shopee: "na Shopee", meli: "no Mercado Livre", amazon: "na Amazon", tiktok: "no TikTok Shop" };
-function textoWhatsApp(o: Oferta) {
+function textoWhatsApp(o: Oferta, lk: { tg?: string; wa?: string } = {}) {
   const d = descontoDe(o);
   return [
     `${d && d >= 40 ? "🔥 ACHADÃO" : "🛒 ACHADO DO DIA"} ${LOJA_WA[o.marketplace] || ""}`.trim(), "",
@@ -235,6 +235,10 @@ function textoWhatsApp(o: Oferta) {
     o.cupom ? `🎟️ Cupom: *${o.cupom}*` : null,
     o.nota ? `📌 ${o.nota}` : null, "",
     `👉 ${o.link}`, "",
+    lk.tg || lk.wa ? "📲 Gostou? Compartilhe e traga seus amigos:" : null,
+    lk.wa ? `💬 WhatsApp: ${lk.wa}` : null,
+    lk.tg ? `✈️ Telegram: ${lk.tg}` : null,
+    lk.tg || lk.wa ? "" : null,
     "⚠️ Preço e estoque podem mudar a qualquer momento.",
     "_O Cara dos Achados_",
   ].filter((x) => x !== null).join("\n");
@@ -251,7 +255,8 @@ async function proximaParaWhatsApp(dono: string, minDesc: number) {
 
 async function enviarHoraWhatsApp(dono: string, chat: string, o: Oferta, n?: string) {
   const token = await tgToken(dono);
-  const txt = textoWhatsApp(o);
+  const { data: lc } = await db.from("achados_config").select("vit_telegram,vit_whatsapp").eq("dono", dono).maybeSingle();
+  const txt = textoWhatsApp(o, { tg: lc?.vit_telegram || undefined, wa: lc?.vit_whatsapp || undefined });
   const d = descontoDe(o);
   const legenda = [
     `🟢 <b>Hora do WhatsApp</b>${n ? ` (${n})` : ""} · achado #${o.num}${d ? ` · ${d}% OFF` : ""}`, "",

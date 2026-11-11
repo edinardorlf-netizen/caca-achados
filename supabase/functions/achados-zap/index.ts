@@ -20,7 +20,7 @@ const descontoDe = (o: Oferta) => (o.preco_de && o.preco_por && Number(o.preco_d
 const pontuacao = (o: Oferta) => Math.round((descontoDe(o) || 0) * 1.2 + (o.comissao || 0) * 2 + (o.cupom ? 8 : 0) + (o.ml_posicao ? Math.max(0, 12 - o.ml_posicao) : 0));
 const LOJA: Record<string, string> = { shopee: "na Shopee", meli: "no Mercado Livre", amazon: "na Amazon", tiktok: "no TikTok Shop" };
 
-function texto(o: Oferta) {
+function texto(o: Oferta, lk: { tg?: string; wa?: string } = {}) {
   const d = descontoDe(o);
   return [
     `${d && d >= 40 ? "🔥 ACHADÃO" : "🛒 ACHADO DO DIA"} ${LOJA[o.marketplace] || ""}`.trim(), "",
@@ -29,6 +29,10 @@ function texto(o: Oferta) {
     o.cupom ? `🎟️ Cupom: *${o.cupom}*` : null,
     o.nota ? `📌 ${o.nota}` : null, "",
     `👉 ${o.link}`, "",
+    lk.tg || lk.wa ? "📲 Gostou? Compartilhe e traga seus amigos:" : null,
+    lk.wa ? `💬 WhatsApp: ${lk.wa}` : null,
+    lk.tg ? `✈️ Telegram: ${lk.tg}` : null,
+    lk.tg || lk.wa ? "" : null,
     "⚠️ Preço e estoque podem mudar a qualquer momento.",
     "_O Cara dos Achados_",
   ].filter((x) => x !== null).join("\n");
@@ -54,14 +58,14 @@ Deno.serve(async (req) => {
     if (!seg || (req.headers.get("x-zap-key") || "") !== seg.valor) return json({ erro: "não autorizado" }, 401);
     const body = await req.json().catch(() => ({}));
 
-    const { data: cfgs } = await db.from("achados_config").select("dono,zap_ativo,zap_ultimo,wa_qtd,wa_intervalo_min,wa_hora_ini,wa_hora_fim,wa_desconto_min").limit(1);
+    const { data: cfgs } = await db.from("achados_config").select("dono,vit_telegram,vit_whatsapp,zap_ativo,zap_ultimo,wa_qtd,wa_intervalo_min,wa_hora_ini,wa_hora_fim,wa_desconto_min").limit(1);
     const c = (cfgs || [])[0];
     if (!c) return json({ erro: "Sem configuração." }, 404);
 
     if (body.acao === "proximas") {
       if (body.teste) {
         const l = await proximas(c.dono, c.wa_desconto_min, 1);
-        return json({ ofertas: l.map((o: Oferta) => ({ id: o.id, texto: texto(o), imagem: o.imagem || null })), motivo: l.length ? "teste" : "sem ofertas" });
+        return json({ ofertas: l.map((o: Oferta) => ({ id: o.id, texto: texto(o, { tg: c.vit_telegram || undefined, wa: c.vit_whatsapp || undefined }), imagem: o.imagem || null })), motivo: l.length ? "teste" : "sem ofertas" });
       }
       if (!c.zap_ativo) return json({ ofertas: [], motivo: "desligado" });
       const h = horaSP();
@@ -70,7 +74,7 @@ Deno.serve(async (req) => {
       if (c.zap_ultimo && Date.now() - Date.parse(c.zap_ultimo) < (intervalo * 60 - 30) * 1000) return json({ ofertas: [], motivo: "aguardando intervalo" });
       const l = await proximas(c.dono, c.wa_desconto_min, Math.max(1, Math.min(30, Number(c.wa_qtd) || 1)));
       if (l.length) await db.from("achados_config").update({ zap_ultimo: new Date().toISOString() }).eq("dono", c.dono);
-      return json({ ofertas: l.map((o: Oferta) => ({ id: o.id, texto: texto(o), imagem: o.imagem || null })), motivo: l.length ? "ok" : "sem ofertas" });
+      return json({ ofertas: l.map((o: Oferta) => ({ id: o.id, texto: texto(o, { tg: c.vit_telegram || undefined, wa: c.vit_whatsapp || undefined }), imagem: o.imagem || null })), motivo: l.length ? "ok" : "sem ofertas" });
     }
     if (body.acao === "confirmar") {
       const ids: string[] = Array.isArray(body.ids) ? body.ids.map(String).slice(0, 50) : [];
