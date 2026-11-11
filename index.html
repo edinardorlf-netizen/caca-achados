@@ -40,6 +40,7 @@
   <nav class="abas" role="tablist" aria-label="Seções">
     <button role="tab" id="tab-cacar" aria-selected="false" data-v="cacar">Caçar</button>
     <button role="tab" id="tab-fila" aria-selected="true" data-v="fila">Fila de ofertas <span class="n" id="n-fila">0</span></button>
+    <button role="tab" id="tab-cupons" aria-selected="false" data-v="cupons">Cupons</button>
     <button role="tab" id="tab-estudio" aria-selected="false" data-v="estudio">Estúdio IA</button>
     <button role="tab" id="tab-postadas" aria-selected="false" data-v="postadas">Postadas</button>
     <button role="tab" id="tab-ajustes" aria-selected="false" data-v="ajustes">Ajustes</button>
@@ -309,6 +310,22 @@
       </div>
     </div>
   </section>
+
+    <!-- CUPONS -->
+  <section id="v-cupons" hidden>
+    <div class="card">
+      <h2>Cupom bônus</h2>
+      <p class="hint">Cupons de site ou de categoria saem sozinhos nos grupos e no Telegram, uma vez a cada rodada, e voltam a cada 2 dias enquanto valerem. O link é opcional.</p>
+      <label class="f">Loja <select class="in" id="cp-loja"><option value="shopee">Shopee</option><option value="meli">Mercado Livre</option><option value="amazon">Amazon</option><option value="tiktok">TikTok Shop</option></select></label>
+      <label class="f">Código do cupom <input class="in" id="cp-cod" placeholder="Ex.: ACHADO10"></label>
+      <label class="f">Regra <input class="in" id="cp-regra" placeholder="Ex.: 10% off em Beleza, acima de R$ 99"></label>
+      <label class="f">Válido até <input class="in" id="cp-val" type="date"></label>
+      <label class="f">Link (opcional) <input class="in" id="cp-link" type="url" placeholder="https://..."></label>
+      <div class="row"><button class="btn amarelo" id="cp-salvar" type="button">Salvar cupom</button><span class="hint" id="cp-msg"></span></div>
+    </div>
+    <div id="cp-lista"></div>
+  </section>
+
 
   <!-- ESTÚDIO IA -->
   <section id="v-estudio" hidden>

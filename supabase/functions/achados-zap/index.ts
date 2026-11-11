@@ -42,6 +42,33 @@ function texto(o: Oferta, lk: { tg?: string; wa?: string } = {}) {
   ].filter((x) => x !== null).join("\n");
 }
 
+function textoCupom(c: Oferta, lk: { tg?: string; wa?: string } = {}) {
+  const val = c.validade ? String(c.validade).split("-").reverse().join("/") : "";
+  return [
+    `🎁 BÔNUS DO GRUPO · CUPOM ${(LOJA[c.loja] || c.loja || "").replace(/^n[oa] /, "").toUpperCase()}`.trim(), "",
+    `🎟️ Cupom: *${c.codigo}*`,
+    c.regra ? `📋 ${c.regra}` : null,
+    val ? `📅 Válido até ${val}` : null,
+    c.link ? `\n👉 Aproveite aqui:\n${c.link}` : null, "",
+    lk.wa ? "💛 Manda pra quem gosta de economizar:" : null,
+    lk.wa ? `💬 ${lk.wa}` : null,
+    lk.wa ? "" : null,
+    "⚠️ Sujeito às regras e à disponibilidade da loja",
+    "_O Cara dos Achados_",
+  ].filter((x) => x !== null).join("\n");
+}
+
+// Um cupom por rodada: o que nunca saiu, ou o que saiu há mais de 2 dias e ainda vale.
+async function cupomDaVez(dono: string, lk: { tg?: string; wa?: string }) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const { data } = await db.from("achados_cupons").select("*").eq("dono", dono).eq("ativo", true).or(`validade.is.null,validade.gte.${hoje}`).limit(100);
+  const limite = Date.now() - 48 * 3600 * 1000;
+  const lst = (data || []).filter((c: Oferta) => !c.wa_avisado_em || Date.parse(c.wa_avisado_em) < limite);
+  lst.sort((a: Oferta, b: Oferta) => (a.wa_avisado_em ? Date.parse(a.wa_avisado_em) : 0) - (b.wa_avisado_em ? Date.parse(b.wa_avisado_em) : 0));
+  const c = lst[0];
+  return c ? { id: `c:${c.id}`, texto: textoCupom(c, lk), imagem: null } : null;
+}
+
 function horaSP() {
   return Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hourCycle: "h23" }).format(new Date()));
 }
@@ -77,13 +104,18 @@ Deno.serve(async (req) => {
       const intervalo = Math.max(10, Number(c.wa_intervalo_min) || 60);
       if (c.zap_ultimo && Date.now() - Date.parse(c.zap_ultimo) < (intervalo * 60 - 30) * 1000) return json({ ofertas: [], motivo: "aguardando intervalo" });
       const l = await proximas(c.dono, c.wa_desconto_min, Math.max(1, Math.min(30, Number(c.wa_qtd) || 1)), c.afiliados_max);
-      if (l.length) await db.from("achados_config").update({ zap_ultimo: new Date().toISOString() }).eq("dono", c.dono);
-      return json({ ofertas: l.map((o: Oferta) => ({ id: o.id, texto: texto(o, { tg: c.vit_telegram || undefined, wa: c.vit_whatsapp || undefined }), imagem: o.imagem || null })), motivo: l.length ? "ok" : "sem ofertas" });
+      const lk = { tg: c.vit_telegram || undefined, wa: c.vit_whatsapp || undefined };
+      const cupom = await cupomDaVez(c.dono, lk);
+      if (l.length || cupom) await db.from("achados_config").update({ zap_ultimo: new Date().toISOString() }).eq("dono", c.dono);
+      const saida = l.map((o: Oferta) => ({ id: o.id, texto: texto(o, lk), imagem: o.imagem || null }));
+      if (cupom) saida.splice(Math.min(1, saida.length), 0, cupom); // o cupom entra logo depois da primeira oferta
+      return json({ ofertas: saida, motivo: saida.length ? "ok" : "sem ofertas" });
     }
     if (body.acao === "confirmar") {
       const ids: string[] = Array.isArray(body.ids) ? body.ids.map(String).slice(0, 50) : [];
       const agora = new Date().toISOString();
       for (const id of ids) {
+        if (id.startsWith("c:")) { await db.from("achados_cupons").update({ wa_avisado_em: agora }).eq("id", id.slice(2)).eq("dono", c.dono); continue; }
         const { data: o } = await db.from("achados_ofertas").select("canais").eq("id", id).eq("dono", c.dono).maybeSingle();
         if (!o) continue;
         await db.from("achados_ofertas").update({ wa_avisado_em: agora, canais: [...new Set([...(o.canais || []), "whatsapp"])] }).eq("id", id).eq("dono", c.dono);

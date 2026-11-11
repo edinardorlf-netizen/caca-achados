@@ -686,12 +686,46 @@ $("#est-lista").addEventListener("click", async (e)=>{
   bt.disabled = false;
 });
 
+// ---------- Cupons bônus ----------
+const LOJA_CP = { shopee:"Shopee", meli:"Mercado Livre", amazon:"Amazon", tiktok:"TikTok Shop" };
+async function carregarCupons(){
+  const { data, error } = await sb.from("achados_cupons").select("*").order("criado_em",{ascending:false}).limit(100);
+  if(error){ $("#cp-lista").innerHTML = `<p class="hint">Não consegui carregar: ${esc(error.message)}</p>`; return; }
+  const hoje = new Date().toISOString().slice(0,10);
+  $("#cp-lista").innerHTML = (data||[]).length ? data.map(c=>{
+    const venc = c.validade && c.validade < hoje;
+    const quando = c.wa_avisado_em ? "último envio: "+new Date(c.wa_avisado_em).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "ainda não enviado";
+    return `<div class="card" data-id="${c.id}">
+      <div class="row" style="justify-content:space-between"><b>${esc(c.codigo)}</b><span class="hint">${esc(LOJA_CP[c.loja]||c.loja)}${venc?" · vencido":""}${!c.ativo?" · pausado":""}</span></div>
+      ${c.regra?`<div>${esc(c.regra)}</div>`:""}
+      <div class="hint">${c.validade?"Válido até "+c.validade.split("-").reverse().join("/")+" · ":""}${quando}</div>
+      <div class="row"><button class="btn ghost sm cp-alt" type="button">${c.ativo?"Pausar":"Ativar"}</button><button class="btn ghost sm cp-ap" type="button">Apagar</button></div>
+    </div>`; }).join("") : `<p class="hint">Nenhum cupom cadastrado ainda.</p>`;
+}
+$("#cp-salvar").onclick = async () => {
+  const codigo = $("#cp-cod").value.trim().toUpperCase();
+  if(!codigo){ $("#cp-msg").textContent = "Digite o código do cupom."; return; }
+  const link = $("#cp-link").value.trim();
+  if(link && !/^https?:\/\//i.test(link)){ $("#cp-msg").textContent = "O link precisa começar com https://"; return; }
+  const { error } = await sb.from("achados_cupons").insert({ dono: await souDono(), loja: $("#cp-loja").value, codigo, regra: $("#cp-regra").value.trim()||null, validade: $("#cp-val").value||null, link: link||null });
+  if(error){ $("#cp-msg").textContent = "Não consegui salvar: "+error.message; return; }
+  ["#cp-cod","#cp-regra","#cp-val","#cp-link"].forEach(s=>$(s).value=""); $("#cp-msg").textContent = "Cupom salvo: sai na próxima rodada."; carregarCupons();
+};
+$("#cp-lista").addEventListener("click", async (e)=>{
+  const bt = e.target.closest("button"); const card = e.target.closest("[data-id]"); if(!bt || !card) return;
+  const id = card.dataset.id;
+  if(bt.classList.contains("cp-ap")){ if(!confirm("Apagar este cupom?")) return; await sb.from("achados_cupons").delete().eq("id", id); }
+  else if(bt.classList.contains("cp-alt")){ const ativo = bt.textContent.trim()==="Ativar"; await sb.from("achados_cupons").update({ ativo }).eq("id", id); }
+  carregarCupons();
+});
+
 // ---------- Abas ----------
 function mostrar(v){
-  ["cacar","fila","estudio","postadas","ajustes"].forEach(k=>{ $("#v-"+k).hidden = k!==v; $("#tab-"+k).setAttribute("aria-selected", k===v); });
+  ["cacar","fila","cupons","estudio","postadas","ajustes"].forEach(k=>{ $("#v-"+k).hidden = k!==v; $("#tab-"+k).setAttribute("aria-selected", k===v); });
   try{ localStorage.setItem("ca-aba", v); }catch{}
   if(v==="ajustes") carregarML();
   if(v==="estudio") carregarEstudio();
+  if(v==="cupons") carregarCupons();
 }
 document.querySelector("nav.abas").addEventListener("click",(e)=>{ const b=e.target.closest("button[data-v]"); if(b) mostrar(b.dataset.v); });
 
