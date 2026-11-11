@@ -274,19 +274,26 @@ async function enviarHoraWhatsApp(dono: string, chat: string, o: Oferta, n?: str
 }
 
 async function whatsappAgendado() {
-  const { data: donos } = await db.from("achados_config").select("dono,alerta_chat_id,wa_posts_dia,wa_hora_ini,wa_hora_fim,wa_desconto_min,wa_ultimo_aviso").eq("wa_ativo", true).not("alerta_chat_id", "is", null);
+  const { data: donos } = await db.from("achados_config").select("dono,alerta_chat_id,wa_intervalo_min,wa_qtd,wa_hora_ini,wa_hora_fim,wa_desconto_min,wa_ultimo_aviso").eq("wa_ativo", true).not("alerta_chat_id", "is", null);
   const res: Record<string, unknown> = {};
   const h = horaSP();
   for (const c of donos || []) {
     if (h < c.wa_hora_ini || h >= c.wa_hora_fim) { res[c.dono] = "fora do horário"; continue; }
-    // Espalha os avisos pela janela: 6 posts das 9h às 21h = um a cada 2h
-    const intervaloMin = Math.max(20, Math.floor(((c.wa_hora_fim - c.wa_hora_ini) * 60) / c.wa_posts_dia));
+    // Um envio a cada X minutos, com a quantidade de ofertas escolhida
+    const intervaloMin = Math.max(10, Number(c.wa_intervalo_min) || 60);
     if (c.wa_ultimo_aviso && Date.now() - Date.parse(c.wa_ultimo_aviso) < (intervaloMin * 60 - 30) * 1000) { res[c.dono] = "aguardando intervalo"; continue; }
     try {
-      const o = await proximaParaWhatsApp(c.dono, c.wa_desconto_min);
-      if (!o) { res[c.dono] = "nada para postar"; await db.from("achados_config").update({ wa_msg: "Nenhuma oferta nova com link e desconto suficiente para o WhatsApp." }).eq("dono", c.dono); continue; }
-      await enviarHoraWhatsApp(c.dono, c.alerta_chat_id, o);
-      res[c.dono] = `aviso #${o.num}`;
+      const qtd = Math.max(1, Math.min(30, Number(c.wa_qtd) || 1));
+      let feitos = 0;
+      for (let i = 0; i < qtd; i++) {
+        const o = await proximaParaWhatsApp(c.dono, c.wa_desconto_min);
+        if (!o) break;
+        if (i > 0) await sleep(1500); // o Telegram limita as mensagens por minuto
+        await enviarHoraWhatsApp(c.dono, c.alerta_chat_id, o, qtd > 1 ? `${i + 1}/${qtd}` : undefined);
+        feitos++;
+      }
+      if (!feitos) { res[c.dono] = "nada para postar"; await db.from("achados_config").update({ wa_msg: "Nenhuma oferta nova com link e desconto suficiente para o WhatsApp." }).eq("dono", c.dono); continue; }
+      res[c.dono] = `${feitos} avisos`;
     } catch (e) {
       res[c.dono] = { erro: (e as Error).message };
       await db.from("achados_config").update({ wa_msg: (e as Error).message.slice(0, 300) }).eq("dono", c.dono);

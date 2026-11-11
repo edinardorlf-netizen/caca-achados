@@ -181,6 +181,7 @@
         </form>
         <div class="fgrid" style="margin-top:12px">
           <label class="f" for="tg-int">Postar a cada (min)<input class="in" id="tg-int" type="number" min="10" max="1440" step="5"></label>
+          <label class="f" for="tg-qtd">Ofertas por envio<input class="in" id="tg-qtd" type="number" min="1" max="30"></label>
           <label class="f" for="tg-ini">Das (hora)<input class="in" id="tg-ini" type="number" min="0" max="23"></label>
           <label class="f" for="tg-fim">Até (hora)<input class="in" id="tg-fim" type="number" min="1" max="24"></label>
           <label class="f" for="tg-min">Desconto mínimo (%)<input class="in" id="tg-min" type="number" min="0" max="95" step="5"></label>
@@ -238,7 +239,8 @@
         <p class="hint" id="wa-status">Carregando…</p>
         <p class="hint">O WhatsApp não deixa nenhum app postar em grupos sozinho sem risco de banir o número. Então, nos horários marcados, o seu bot do Telegram te manda <b>em particular</b> a oferta da vez com o botão <b>Enviar no WhatsApp</b>: o texto já abre pronto, você escolhe o grupo ou canal e envia. Usa a mesma conversa vinculada no cartão <b>Aviso de achadão</b>.</p>
         <div class="fgrid" style="margin-top:8px">
-          <label class="f" for="wa-n">Ofertas por dia<input class="in" id="wa-n" type="number" min="1" max="30"></label>
+          <label class="f" for="wa-int">Enviar a cada (min)<input class="in" id="wa-int" type="number" min="10" max="1440" step="5"></label>
+          <label class="f" for="wa-n">Ofertas por envio<input class="in" id="wa-n" type="number" min="1" max="30"></label>
           <label class="f" for="wa-ini">Das (hora)<input class="in" id="wa-ini" type="number" min="0" max="23"></label>
           <label class="f" for="wa-fim">Até (hora)<input class="in" id="wa-fim" type="number" min="1" max="24"></label>
           <label class="f" for="wa-min">Desconto mínimo (%)<input class="in" id="wa-min" type="number" min="0" max="95" step="5"></label>

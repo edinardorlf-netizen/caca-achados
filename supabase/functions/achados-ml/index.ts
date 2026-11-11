@@ -298,7 +298,7 @@ async function tg(token: string, metodo: string, corpo: Record<string, unknown>)
 
 async function configTg(dono: string) {
   const { data: tok } = await db.rpc("achados_tg_token", { p_dono: dono });
-  const { data: cfg } = await db.from("achados_config").select("tg_chat_id,tg_ativo,tg_intervalo_min,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post").eq("dono", dono).single();
+  const { data: cfg } = await db.from("achados_config").select("tg_chat_id,tg_ativo,tg_intervalo_min,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post,tg_qtd").eq("dono", dono).single();
   if (!tok) throw new Error("Falta o token do bot do Telegram.");
   if (!cfg?.tg_chat_id) throw new Error("Falta o canal ou grupo do Telegram.");
   return { token: tok as string, cfg };
@@ -345,10 +345,18 @@ async function postarAgendado() {
       const h = horaSP();
       if (h < cfg.tg_hora_ini || h >= cfg.tg_hora_fim) { res[dono] = "fora do horário"; continue; }
       if (cfg.tg_ultimo_post && Date.now() - Date.parse(cfg.tg_ultimo_post) < (cfg.tg_intervalo_min * 60 - 30) * 1000) { res[dono] = "aguardando intervalo"; continue; }
-      const o = await proximaOferta(dono, cfg.tg_modo, cfg.tg_desconto_min);
-      if (!o) { res[dono] = "nada para postar"; await db.from("achados_config").update({ tg_msg: "Nenhuma oferta com link e desconto suficiente na fila." }).eq("dono", dono); continue; }
-      await enviarOferta(dono, token, cfg.tg_chat_id, o);
-      res[dono] = `postado ${o.id}`;
+      const qtd = Math.max(1, Math.min(30, Number(cfg.tg_qtd) || 1));
+      let feitos = 0;
+      for (let i = 0; i < qtd; i++) {
+        const o = await proximaOferta(dono, cfg.tg_modo, cfg.tg_desconto_min);
+        if (!o) break;
+        if (i > 0) await sleep(1500); // o Telegram limita as mensagens por minuto
+        await enviarOferta(dono, token, cfg.tg_chat_id, o);
+        feitos++;
+      }
+      if (!feitos) { res[dono] = "nada para postar"; await db.from("achados_config").update({ tg_msg: "Nenhuma oferta com link e desconto suficiente na fila." }).eq("dono", dono); continue; }
+      if (feitos > 1) await db.from("achados_config").update({ tg_msg: `Postei ${feitos} ofertas de uma vez` }).eq("dono", dono);
+      res[dono] = `postadas ${feitos}`;
     } catch (e) {
       res[dono] = { erro: (e as Error).message };
       await db.from("achados_config").update({ tg_msg: (e as Error).message.slice(0, 300) }).eq("dono", dono);
