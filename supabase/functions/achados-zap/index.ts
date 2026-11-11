@@ -47,11 +47,11 @@ function horaSP() {
   return Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hourCycle: "h23" }).format(new Date()));
 }
 
-async function proximas(dono: string, minDesc: number, qtd: number) {
+async function proximas(dono: string, minDesc: number, qtd: number, maxAfil: number | null = null) {
   const hoje = new Date().toISOString().slice(0, 10);
   const { data } = await db.from("achados_ofertas").select("*").eq("dono", dono).not("link", "is", null).eq("exemplo", false)
     .is("wa_avisado_em", null).in("status", ["nova", "aprovada", "postada"]).or(`validade.is.null,validade.gte.${hoje}`).limit(400);
-  const lst = (data || []).filter((o: Oferta) => (descontoDe(o) || 0) >= minDesc && !(o.canais || []).includes("whatsapp"));
+  const lst = (data || []).filter((o: Oferta) => (descontoDe(o) || 0) >= minDesc && !(o.canais || []).includes("whatsapp") && !(maxAfil && o.afiliados != null && o.afiliados > maxAfil));
   lst.sort((a: Oferta, b: Oferta) => (b.est_status === "aprovado" ? 1 : 0) - (a.est_status === "aprovado" ? 1 : 0) || (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
   return lst.slice(0, qtd);
 }
@@ -63,13 +63,13 @@ Deno.serve(async (req) => {
     if (!seg || (req.headers.get("x-zap-key") || "") !== seg.valor) return json({ erro: "não autorizado" }, 401);
     const body = await req.json().catch(() => ({}));
 
-    const { data: cfgs } = await db.from("achados_config").select("dono,vit_telegram,vit_whatsapp,zap_ativo,zap_ultimo,wa_qtd,wa_intervalo_min,wa_hora_ini,wa_hora_fim,wa_desconto_min").limit(1);
+    const { data: cfgs } = await db.from("achados_config").select("dono,vit_telegram,vit_whatsapp,zap_ativo,zap_ultimo,wa_qtd,wa_intervalo_min,wa_hora_ini,wa_hora_fim,wa_desconto_min,afiliados_max").limit(1);
     const c = (cfgs || [])[0];
     if (!c) return json({ erro: "Sem configuração." }, 404);
 
     if (body.acao === "proximas") {
       if (body.teste) {
-        const l = await proximas(c.dono, c.wa_desconto_min, 1);
+        const l = await proximas(c.dono, c.wa_desconto_min, 1, c.afiliados_max);
         return json({ ofertas: l.map((o: Oferta) => ({ id: o.id, texto: texto(o, { tg: c.vit_telegram || undefined, wa: c.vit_whatsapp || undefined }), imagem: o.imagem || null })), motivo: l.length ? "teste" : "sem ofertas" });
       }
       if (!c.zap_ativo) return json({ ofertas: [], motivo: "desligado" });
@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
       if (h < c.wa_hora_ini || h >= c.wa_hora_fim) return json({ ofertas: [], motivo: "fora do horário" });
       const intervalo = Math.max(10, Number(c.wa_intervalo_min) || 60);
       if (c.zap_ultimo && Date.now() - Date.parse(c.zap_ultimo) < (intervalo * 60 - 30) * 1000) return json({ ofertas: [], motivo: "aguardando intervalo" });
-      const l = await proximas(c.dono, c.wa_desconto_min, Math.max(1, Math.min(30, Number(c.wa_qtd) || 1)));
+      const l = await proximas(c.dono, c.wa_desconto_min, Math.max(1, Math.min(30, Number(c.wa_qtd) || 1)), c.afiliados_max);
       if (l.length) await db.from("achados_config").update({ zap_ultimo: new Date().toISOString() }).eq("dono", c.dono);
       return json({ ofertas: l.map((o: Oferta) => ({ id: o.id, texto: texto(o, { tg: c.vit_telegram || undefined, wa: c.vit_whatsapp || undefined }), imagem: o.imagem || null })), motivo: l.length ? "ok" : "sem ofertas" });
     }

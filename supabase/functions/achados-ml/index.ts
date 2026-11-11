@@ -336,7 +336,9 @@ async function proximaOferta(dono: string, modo: string, minDesc: number) {
   q = modo === "aprovadas" ? q.eq("status", "aprovada") : q.in("status", ["nova", "aprovada"]);
   const { data } = await q;
   // deno-lint-ignore no-explicit-any
-  const lst = (data || []).filter((o: any) => (descontoDe(o) || 0) >= minDesc);
+  const { data: cf } = await db.from("achados_config").select("afiliados_max").eq("dono", dono).maybeSingle();
+  const maxAfil = cf?.afiliados_max || null;
+  const lst = (data || []).filter((o: any) => (descontoDe(o) || 0) >= minDesc && !(maxAfil && o.afiliados != null && o.afiliados > maxAfil));
   // deno-lint-ignore no-explicit-any
   lst.sort((a: any, b: any) => (b.est_status === "aprovado" ? 1 : 0) - (a.est_status === "aprovado" ? 1 : 0) || (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
   return lst[0] || null;

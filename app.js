@@ -633,7 +633,8 @@ async function carregarEstudio(){
     $("#est-persona").value = c?.est_persona || "";
     $("#est-ia-status").innerHTML = ia ? `<span class="ponto on"></span> Chave da IA salva: os ganchos são escritos pelo Claude.` : `<span class="ponto"></span> Sem chave: uso modelos de gancho prontos (funciona, só é menos variado).`;
   }catch{}
-  const { data, error } = await sb.from("achados_ofertas").select("id,titulo,marketplace,preco_de,preco_por,imagem,link,est_score,est_motivos,est_texto,est_status")
+  try{ const { data: c2 } = await sb.from("achados_config").select("afiliados_max").maybeSingle(); $("#est-afil-max").value = c2?.afiliados_max || ""; }catch{}
+  const { data, error } = await sb.from("achados_ofertas").select("id,titulo,marketplace,preco_de,preco_por,imagem,link,est_score,est_motivos,est_texto,est_status,afiliados")
     .in("status",["nova","aprovada"]).eq("exemplo",false).not("est_score","is",null).neq("est_status","rejeitado").order("est_score",{ascending:false}).limit(24);
   if(error){ $("#est-lista").innerHTML = `<p class="hint">Não consegui carregar: ${esc(error.message)}</p>`; return; }
   if(!(data||[]).length){ $("#est-lista").innerHTML = `<p class="hint">Toque em <b>Minerar agora</b> para avaliar as ofertas.</p>`; return; }
@@ -645,6 +646,7 @@ async function carregarEstudio(){
       <div>${esc(String(o.titulo).slice(0,90))}</div>
       <div class="hint">${o.preco_de&&d?`<s>${brl(o.preco_de)}</s> `:""}<b>${brl(o.preco_por)}</b>${d?` · ${d}% OFF`:""} · ${esc(MKT[o.marketplace]?.nome||o.marketplace)}</div>
       <div class="hint">${esc((o.est_motivos||[]).join(" · "))}</div>
+      <label class="hint">Afiliados no produto (veja na página dele no app da Shopee, "Afiliados Promovidos"): <input class="in est-afil" type="number" min="0" inputmode="numeric" value="${o.afiliados ?? ""}" placeholder="ex.: 190" style="width:90px"></label>
       <textarea class="in est-txt" rows="2" placeholder="Toque em Escrever para gerar o gancho">${esc(o.est_texto||"")}</textarea>
       <div class="row"><button class="btn sm est-escrever" type="button">${o.est_texto?"Reescrever":"Escrever"}</button><button class="btn amarelo sm est-aprovar" type="button">Aprovar</button><button class="btn ghost sm est-rejeitar" type="button">Rejeitar</button></div>
     </div>`; }).join("");
@@ -663,6 +665,15 @@ $("#est-salvar").onclick = async () => {
   toast("Persona salva"); carregarEstudio();
 };
 $("#est-remover-chave").onclick = async () => { const { error } = await sb.rpc("achados_salvar_ia", { p_chave: "" }); if(error) return toast(error.message); toast("Chave removida"); carregarEstudio(); };
+$("#est-afil-max").onchange = async () => {
+  const v = parseInt($("#est-afil-max").value,10);
+  const { error } = await sb.from("achados_config").update({ afiliados_max: v>0 ? v : null }).eq("dono", await souDono());
+  toast(error ? "Não consegui salvar: "+error.message : (v>0 ? `Só postarei produtos com até ${v} afiliados (quando o número estiver preenchido)` : "Filtro de afiliados desligado"));
+};
+$("#est-lista").addEventListener("change", async (e)=>{
+  const inp = e.target.closest(".est-afil"); const card = e.target.closest("[data-id]"); if(!inp || !card) return;
+  try{ await chamarML("afiliados", { id: card.dataset.id, afiliados: inp.value }, FN_EST); toast("Número de afiliados salvo"); }catch(err){ toast(errMsg(err)); }
+});
 $("#est-lista").addEventListener("click", async (e)=>{
   const bt = e.target.closest("button"); const card = e.target.closest("[data-id]"); if(!bt || !card) return;
   const id = card.dataset.id, txt = card.querySelector(".est-txt");

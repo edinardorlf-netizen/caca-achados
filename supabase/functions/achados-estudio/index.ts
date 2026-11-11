@@ -38,6 +38,7 @@ function nota(o: Oferta): { score: number; motivos: string[] } {
   if (p >= 25 && p <= 250) { s += 8; motivos.push("faixa de preço que converte"); }
   else if (p > 600) s -= 6; // ticket muito alto vende devagar em canal de ofertas
   if (o.imagem) s += 4; else { s -= 6; motivos.push("sem foto"); }
+  if (o.afiliados != null) { if (o.afiliados <= 100) { s += 8; motivos.push(`só ${o.afiliados} afiliados`); } else if (o.afiliados <= 300) { s += 4; motivos.push(`${o.afiliados} afiliados`); } else { s -= 8; motivos.push(`${o.afiliados} afiliados (concorrido)`); } }
   if (!o.link) s -= 30;
   return { score: Math.max(0, Math.min(100, Math.round(s))), motivos };
 }
@@ -136,6 +137,12 @@ Deno.serve(async (req) => {
       const patch: Record<string, unknown> = { est_status: "aprovado", est_em: new Date().toISOString() };
       if (typeof b.texto === "string") patch.est_texto = b.texto.replace(/\s+/g, " ").trim().slice(0, 220);
       await db.from("achados_ofertas").update(patch).eq("id", id).eq("dono", email);
+      return json({ ok: true });
+    }
+    if (b.acao === "afiliados") {
+      const n = b.afiliados === "" || b.afiliados == null ? null : Math.max(0, Math.min(1000000, Math.round(Number(b.afiliados))));
+      if (n !== null && !Number.isFinite(n)) return json({ erro: "Número inválido." }, 400);
+      await db.from("achados_ofertas").update({ afiliados: n }).eq("id", id).eq("dono", email);
       return json({ ok: true });
     }
     if (b.acao === "rejeitar") { await db.from("achados_ofertas").update({ est_status: "rejeitado", est_em: new Date().toISOString() }).eq("id", id).eq("dono", email); return json({ ok: true }); }
