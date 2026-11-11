@@ -40,6 +40,7 @@
   <nav class="abas" role="tablist" aria-label="Seções">
     <button role="tab" id="tab-cacar" aria-selected="false" data-v="cacar">Caçar</button>
     <button role="tab" id="tab-fila" aria-selected="true" data-v="fila">Fila de ofertas <span class="n" id="n-fila">0</span></button>
+    <button role="tab" id="tab-estudio" aria-selected="false" data-v="estudio">Estúdio IA</button>
     <button role="tab" id="tab-postadas" aria-selected="false" data-v="postadas">Postadas</button>
     <button role="tab" id="tab-ajustes" aria-selected="false" data-v="ajustes">Ajustes</button>
   </nav>
@@ -307,6 +308,31 @@
         <p class="hint">O TikTok não tem API de afiliados para criadores no Brasil, então aqui é manual: no app do TikTok, vá em <b>Perfil › Central de criadores › Afiliados › Mercado de produtos</b>, adicione à vitrine e use nas lives e vídeos. Para lembrar de um produto, cole o link na aba <b>Caçar</b>: ele entra na fila com o roteiro de live pronto.</p>
       </div>
     </div>
+  </section>
+
+  <!-- ESTÚDIO IA -->
+  <section id="v-estudio" hidden>
+    <div class="layout">
+      <div class="card">
+        <h2>Minerador</h2>
+        <p class="hint">Dá uma nota de 0 a 100 para cada oferta aberta (desconto, comissão, cupom, posição entre os mais vendidos, faixa de preço e foto) e mostra as melhores para você aprovar.</p>
+        <div class="row"><button class="btn amarelo" id="est-minerar" type="button">Minerar agora</button><span class="hint" id="est-msg"></span></div>
+      </div>
+      <div class="card">
+        <h2>Persona</h2>
+        <p class="hint">Como o <b>Cara dos Achados</b> fala. A IA escreve só o gancho (1 ou 2 frases) de cada oferta; título, preços, cupom e links vêm sempre dos dados reais.</p>
+        <label class="f" for="est-persona">Jeito de falar
+          <textarea class="in" id="est-persona" rows="3" placeholder="Ex.: direto, bem-humorado e brasileiro; frases curtas; no máximo 2 emojis."></textarea>
+        </label>
+        <label class="f" for="est-chave">Chave da IA (Claude), opcional
+          <input class="in" id="est-chave" type="password" autocomplete="off" placeholder="Cole aqui para usar a IA; vazio mantém a atual">
+        </label>
+        <p class="hint" id="est-ia-status"></p>
+        <div class="row"><button class="btn" id="est-salvar" type="button">Salvar</button><button class="btn ghost sm" id="est-remover-chave" type="button">Remover chave</button></div>
+      </div>
+    </div>
+    <h2 style="font-size:16px;margin:18px 0 10px">Melhores achados para aprovar</h2>
+    <div id="est-lista" class="layout"></div>
   </section>
 
   <!-- POSTADAS -->

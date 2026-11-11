@@ -2,7 +2,7 @@
    Fila de promoções de afiliado com posts prontos. Dados no Supabase (só o dono vê). */
 const CFG = window.ACHADOS_CONFIG;
 const sb = supabase.createClient(CFG.url, CFG.key, { auth: { persistSession: true } });
-const FN = `${CFG.url}/functions/v1/achados-ml`, FN_SHP = `${CFG.url}/functions/v1/achados-shopee`, FN_ST = `${CFG.url}/functions/v1/achados-story`;
+const FN = `${CFG.url}/functions/v1/achados-ml`, FN_SHP = `${CFG.url}/functions/v1/achados-shopee`, FN_ST = `${CFG.url}/functions/v1/achados-story`, FN_EST = `${CFG.url}/functions/v1/achados-estudio`;
 
 const MKT = {
   shopee:{nome:"Shopee",cor:"var(--shopee)",
@@ -625,11 +625,62 @@ $("#ml-buscar").onclick = async () => {
   b.disabled=false; b.textContent="Buscar agora";
 };
 
+
+// ---------- Estúdio IA ----------
+async function carregarEstudio(){
+  try{
+    const [{ data: c }, { data: ia }] = await Promise.all([ sb.from("achados_config").select("est_persona").maybeSingle(), sb.rpc("achados_ia_status") ]);
+    $("#est-persona").value = c?.est_persona || "";
+    $("#est-ia-status").innerHTML = ia ? `<span class="ponto on"></span> Chave da IA salva: os ganchos são escritos pelo Claude.` : `<span class="ponto"></span> Sem chave: uso modelos de gancho prontos (funciona, só é menos variado).`;
+  }catch{}
+  const { data, error } = await sb.from("achados_ofertas").select("id,titulo,marketplace,preco_de,preco_por,imagem,link,est_score,est_motivos,est_texto,est_status")
+    .in("status",["nova","aprovada"]).eq("exemplo",false).not("est_score","is",null).neq("est_status","rejeitado").order("est_score",{ascending:false}).limit(24);
+  if(error){ $("#est-lista").innerHTML = `<p class="hint">Não consegui carregar: ${esc(error.message)}</p>`; return; }
+  if(!(data||[]).length){ $("#est-lista").innerHTML = `<p class="hint">Toque em <b>Minerar agora</b> para avaliar as ofertas.</p>`; return; }
+  $("#est-lista").innerHTML = data.map(o=>{
+    const d = o.preco_de && o.preco_por && o.preco_de>o.preco_por ? Math.round((1-o.preco_por/o.preco_de)*100) : null;
+    const st = o.est_status==="aprovado" ? `<span class="chip" aria-pressed="true">Aprovada</span>` : "";
+    return `<div class="card" data-id="${o.id}">
+      <div class="row" style="justify-content:space-between"><b>Nota ${o.est_score}</b>${st}</div>
+      <div>${esc(String(o.titulo).slice(0,90))}</div>
+      <div class="hint">${o.preco_de&&d?`<s>${brl(o.preco_de)}</s> `:""}<b>${brl(o.preco_por)}</b>${d?` · ${d}% OFF`:""} · ${esc(MKT[o.marketplace]?.nome||o.marketplace)}</div>
+      <div class="hint">${esc((o.est_motivos||[]).join(" · "))}</div>
+      <textarea class="in est-txt" rows="2" placeholder="Toque em Escrever para gerar o gancho">${esc(o.est_texto||"")}</textarea>
+      <div class="row"><button class="btn sm est-escrever" type="button">${o.est_texto?"Reescrever":"Escrever"}</button><button class="btn amarelo sm est-aprovar" type="button">Aprovar</button><button class="btn ghost sm est-rejeitar" type="button">Rejeitar</button></div>
+    </div>`; }).join("");
+}
+$("#est-minerar").onclick = async () => {
+  const b=$("#est-minerar"); b.disabled=true; $("#est-msg").textContent="Avaliando…";
+  try{ const r = await chamarML("minerar", {}, FN_EST); $("#est-msg").textContent = `${r.avaliadas} ofertas avaliadas.`; await carregarEstudio(); }
+  catch(err){ $("#est-msg").textContent = errMsg(err); }
+  b.disabled=false;
+};
+$("#est-salvar").onclick = async () => {
+  const chave = $("#est-chave").value.trim();
+  const { error } = await sb.from("achados_config").update({ est_persona: $("#est-persona").value.trim() || null }).eq("dono", await souDono());
+  if(error) return toast("Não consegui salvar: "+error.message);
+  if(chave){ const { error: e2 } = await sb.rpc("achados_salvar_ia", { p_chave: chave }); if(e2) return toast("Não consegui guardar a chave: "+e2.message); $("#est-chave").value=""; }
+  toast("Persona salva"); carregarEstudio();
+};
+$("#est-remover-chave").onclick = async () => { const { error } = await sb.rpc("achados_salvar_ia", { p_chave: "" }); if(error) return toast(error.message); toast("Chave removida"); carregarEstudio(); };
+$("#est-lista").addEventListener("click", async (e)=>{
+  const bt = e.target.closest("button"); const card = e.target.closest("[data-id]"); if(!bt || !card) return;
+  const id = card.dataset.id, txt = card.querySelector(".est-txt");
+  bt.disabled = true;
+  try{
+    if(bt.classList.contains("est-escrever")){ const r = await chamarML("escrever", { id }, FN_EST); txt.value = r.texto; if(r.aviso) toast(r.aviso); bt.textContent="Reescrever"; }
+    else if(bt.classList.contains("est-aprovar")){ if(!txt.value.trim()){ toast("Escreva o gancho antes de aprovar."); } else { await chamarML("aprovar", { id, texto: txt.value }, FN_EST); toast("Aprovada: sai com este gancho nos grupos e no Telegram"); carregarEstudio(); } }
+    else if(bt.classList.contains("est-rejeitar")){ await chamarML("rejeitar", { id }, FN_EST); card.remove(); }
+  }catch(err){ toast(errMsg(err)); }
+  bt.disabled = false;
+});
+
 // ---------- Abas ----------
 function mostrar(v){
-  ["cacar","fila","postadas","ajustes"].forEach(k=>{ $("#v-"+k).hidden = k!==v; $("#tab-"+k).setAttribute("aria-selected", k===v); });
+  ["cacar","fila","estudio","postadas","ajustes"].forEach(k=>{ $("#v-"+k).hidden = k!==v; $("#tab-"+k).setAttribute("aria-selected", k===v); });
   try{ localStorage.setItem("ca-aba", v); }catch{}
   if(v==="ajustes") carregarML();
+  if(v==="estudio") carregarEstudio();
 }
 document.querySelector("nav.abas").addEventListener("click",(e)=>{ const b=e.target.closest("button[data-v]"); if(b) mostrar(b.dataset.v); });
 
