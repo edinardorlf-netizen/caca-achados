@@ -697,6 +697,41 @@ $("#est-lista").addEventListener("click", async (e)=>{
   bt.disabled = false;
 });
 
+// Publicação: legenda + link + passo a passo por plataforma (o app não consegue postar sozinho)
+const VD_GANCHO = { achadinho:"Achadinho que vale cada centavo", provador:"Olha como ficou", unboxing:"Chegou e eu preciso mostrar", uso:"Vem ver como funciona", review:"Testei e vou te contar", problema:"Resolvi esse problema de um jeito simples" };
+function vdPacote(o, plat, estilo){
+  const nome = String(o.titulo||"").replace(/\s+/g," ").trim().slice(0,70);
+  const preco = o.preco_por ? ` por ${brl(o.preco_por)}` : "";
+  const gancho = VD_GANCHO[estilo] || VD_GANCHO.achadinho;
+  const tags = plat==="tiktok" ? "#achadinhos #tiktokshop #achadosdashopee #ofertas #promocao #fyp" : "#achadinhos #shopee #shopeevideo #ofertas #promocao #achadosdashopee";
+  const desc = o.desconto ? `\n🔥 ${o.desconto}% OFF agora` : "";
+  const leg = plat==="tiktok"
+    ? `${gancho}! 👀\n${nome}${preco}${desc}\n\nProduto no carrinho laranja ⬇️\n${tags}`
+    : `${gancho}! 👀\n${nome}${preco}${desc}\n\nToque no produto aqui embaixo para ver e comprar ⬇️\n${tags}`;
+  const passos = plat==="tiktok"
+    ? ["Salve o vídeo do Flow nas Fotos do iPad.","Abra o TikTok → + → Enviar e escolha o vídeo.","Na tela de publicar, toque em Adicionar link/produto e procure pelo nome do produto (botão Copiar nome).","Cole a legenda, revise e publique."]
+    : ["Salve o vídeo do Flow nas Fotos do iPad.","Abra o app da Shopee → Vídeo → + (criar) e escolha o vídeo.","Toque em Adicionar produto e procure pelo nome do produto (botão Copiar nome). Ele já sai com a sua comissão de afiliado.","Cole a legenda, revise e publique."];
+  const obs = plat==="tiktok"
+    ? "TikTok Shop: o produto é adicionado dentro do próprio app do TikTok (o link de afiliado da Shopee não vale lá). Use este pacote só se o produto também estiver no TikTok Shop; a legenda e o nome servem para a busca."
+    : "O link de afiliado fica copiado abaixo; se o app pedir link em vez de busca, cole-o.";
+  return { leg, passos, obs };
+}
+$("#vd-lista").addEventListener("click", (e)=>{
+  const bt = e.target.closest("button"); const card = e.target.closest("[data-id]"); if(!bt || !card) return;
+  if(bt.classList.contains("vd-pub")){
+    const d = card.dataset;
+    const pk = vdPacote({ titulo: d.titulo, preco_por: Number(d.preco)||0, desconto: Number(d.desc)||0 }, bt.dataset.p, card.querySelector(".vd-estilo").value);
+    card.querySelector(".vd-pac-leg").value = pk.leg;
+    card.querySelector(".vd-pac-obs").textContent = pk.obs;
+    card.querySelector(".vd-pac-passos").innerHTML = pk.passos.map(s=>`<li>${esc(s)}</li>`).join("");
+    card.querySelector(".vd-pacote").hidden = false;
+  }
+  const cop = async (txt, msg)=>{ try{ await navigator.clipboard.writeText(txt); toast(msg); }catch{ toast("Não consegui copiar"); } };
+  if(bt.classList.contains("vd-pac-cop-leg")) cop(card.querySelector(".vd-pac-leg").value, "Legenda copiada");
+  if(bt.classList.contains("vd-pac-cop-link")) cop(bt.dataset.link, bt.dataset.link?"Link de afiliado copiado":"Produto sem link");
+  if(bt.classList.contains("vd-pac-cop-nome")) cop(card.dataset.titulo||"", "Nome copiado: cole na busca do app");
+});
+
 // Personagem
 async function carregarPersonagem(){
   try{
@@ -716,10 +751,10 @@ $("#est-remover-chave").onclick = async () => { const { error } = await sb.rpc("
 
 // Vídeos
 async function carregarVideos(){
-  const { data, error } = await sb.from("est_produtos").select("id,titulo,imagem,preco_por,desconto,prompt_foto,prompt_video,video_estilo").eq("status","escolhido").order("nota",{ascending:false}).limit(20);
+  const { data, error } = await sb.from("est_produtos").select("id,titulo,imagem,link,preco_por,desconto,prompt_foto,prompt_video,video_estilo").eq("status","escolhido").order("nota",{ascending:false}).limit(20);
   if(error){ $("#vd-lista").innerHTML = `<p class="hint">Não consegui carregar: ${esc(error.message)}</p>`; return; }
   if(!(data||[]).length){ $("#vd-lista").innerHTML = `<p class="hint">Nenhum produto escolhido ainda. No Minerador, toque em <b>Escolher para vídeo</b>.</p>`; return; }
-  $("#vd-lista").innerHTML = data.map(o=>`<div class="card" data-id="${o.id}">
+  $("#vd-lista").innerHTML = data.map(o=>`<div class="card" data-id="${o.id}" data-titulo="${esc(o.titulo||"")}" data-preco="${o.preco_por||""}" data-desc="${o.desconto||0}">
       <div class="row" style="flex-wrap:nowrap;align-items:flex-start"><div class="thumb">${o.imagem?`<img src="${esc(o.imagem)}" alt="" loading="lazy">`:""}</div>
       <div style="min-width:0;flex:1"><div>${esc(String(o.titulo).slice(0,90))}</div><div class="hint"><b>${brl(o.preco_por)}</b>${o.desconto?` · ${o.desconto}% OFF`:""}</div></div></div>
       <b class="hint">1. Prompt da foto (para o Gemini / Nano Banana)</b>
@@ -731,6 +766,17 @@ async function carregarVideos(){
       <select class="in vd-estilo">${EST_ESTILOS.map(([v,n])=>`<option value="${v}"${o.video_estilo===v?" selected":""}>${n}</option>`).join("")}</select>
       <textarea class="in vd-pv" rows="12" placeholder="Escolha o estilo e toque em Sugerir prompt do vídeo">${esc(o.prompt_video||"")}</textarea>
       <div class="row"><button class="btn amarelo sm vd-gerar-video" type="button">Sugerir prompt do vídeo</button><button class="btn ghost sm vd-copiar-video" type="button">Copiar</button></div>
+      <b class="hint">4. Publicar o vídeo com o link</b>
+      <div class="row">
+        <button class="btn sm vd-pub" data-p="shopee" type="button">Pacote Shopee Vídeo</button>
+        <button class="btn sm vd-pub" data-p="tiktok" type="button">Pacote TikTok</button>
+      </div>
+      <div class="vd-pacote" hidden>
+        <div class="hint vd-pac-obs"></div>
+        <textarea class="in vd-pac-leg" rows="7"></textarea>
+        <div class="row"><button class="btn amarelo sm vd-pac-cop-leg" type="button">Copiar legenda</button><button class="btn ghost sm vd-pac-cop-link" type="button" data-link="${esc(o.link||"")}">Copiar link de afiliado</button><button class="btn ghost sm vd-pac-cop-nome" type="button">Copiar nome do produto</button></div>
+        <ol class="hint vd-pac-passos"></ol>
+      </div>
     </div>`).join("");
 }
 // reduz a foto para no máximo 1024 px e devolve JPEG em base64
