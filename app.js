@@ -634,7 +634,7 @@ async function carregarEstudio(){
     $("#est-ia-status").innerHTML = ia ? `<span class="ponto on"></span> Chave da IA salva: os ganchos são escritos pelo Claude.` : `<span class="ponto"></span> Sem chave: uso modelos de gancho prontos (funciona, só é menos variado).`;
   }catch{}
   try{ const { data: c2 } = await sb.from("achados_config").select("afiliados_max").maybeSingle(); $("#est-afil-max").value = c2?.afiliados_max || ""; }catch{}
-  const { data, error } = await sb.from("achados_ofertas").select("id,titulo,marketplace,preco_de,preco_por,imagem,link,est_score,est_motivos,est_texto,est_status,afiliados")
+  const { data, error } = await sb.from("achados_ofertas").select("id,titulo,marketplace,preco_de,preco_por,imagem,link,est_score,est_motivos,est_texto,est_status,afiliados,est_roteiro")
     .in("status",["nova","aprovada"]).eq("exemplo",false).not("est_score","is",null).neq("est_status","rejeitado").order("est_score",{ascending:false}).limit(24);
   if(error){ $("#est-lista").innerHTML = `<p class="hint">Não consegui carregar: ${esc(error.message)}</p>`; return; }
   if(!(data||[]).length){ $("#est-lista").innerHTML = `<p class="hint">Toque em <b>Minerar agora</b> para avaliar as ofertas.</p>`; return; }
@@ -647,8 +647,8 @@ async function carregarEstudio(){
       <div class="hint">${o.preco_de&&d?`<s>${brl(o.preco_de)}</s> `:""}<b>${brl(o.preco_por)}</b>${d?` · ${d}% OFF`:""} · ${esc(MKT[o.marketplace]?.nome||o.marketplace)}</div>
       <div class="hint">${esc((o.est_motivos||[]).join(" · "))}</div>
       <label class="hint">Afiliados no produto (veja na página dele no app da Shopee, "Afiliados Promovidos"): <input class="in est-afil" type="number" min="0" inputmode="numeric" value="${o.afiliados ?? ""}" placeholder="ex.: 190" style="width:90px"></label>
-      <textarea class="in est-txt" rows="2" placeholder="Toque em Escrever para gerar o gancho">${esc(o.est_texto||"")}</textarea>
-      <div class="row"><button class="btn sm est-escrever" type="button">${o.est_texto?"Reescrever":"Escrever"}</button><button class="btn amarelo sm est-aprovar" type="button">Aprovar</button><button class="btn ghost sm est-rejeitar" type="button">Rejeitar</button></div>
+      <textarea class="in est-txt" rows="9" placeholder="Toque em Gerar roteiro: gancho, falas, chamada, legenda e hashtags para TikTok e Shopee Vídeo">${esc(o.est_roteiro||"")}</textarea>
+      <div class="row"><button class="btn amarelo sm est-roteiro" type="button">${o.est_roteiro?"Gerar de novo":"Gerar roteiro"}</button><button class="btn sm est-salvar-r" type="button">Salvar edição</button><button class="btn sm est-copiar" type="button">Copiar</button><button class="btn ghost sm est-rejeitar" type="button">Dispensar</button></div>
     </div>`; }).join("");
 }
 $("#est-minerar").onclick = async () => {
@@ -679,7 +679,10 @@ $("#est-lista").addEventListener("click", async (e)=>{
   const id = card.dataset.id, txt = card.querySelector(".est-txt");
   bt.disabled = true;
   try{
-    if(bt.classList.contains("est-escrever")){ const r = await chamarML("escrever", { id }, FN_EST); txt.value = r.texto; if(r.aviso) toast(r.aviso); bt.textContent="Reescrever"; }
+    if(bt.classList.contains("est-roteiro")){ const r = await chamarML("roteiro", { id }, FN_EST); txt.value = r.texto; if(r.aviso) toast(r.aviso); bt.textContent="Gerar de novo"; }
+    else if(bt.classList.contains("est-salvar-r")){ await chamarML("roteiro_salvar", { id, texto: txt.value }, FN_EST); toast("Roteiro salvo"); }
+    else if(bt.classList.contains("est-copiar")){ try{ await navigator.clipboard.writeText(txt.value); toast("Roteiro copiado"); }catch{ txt.select(); toast("Selecionei o texto: copie manualmente"); } }
+    else if(bt.classList.contains("est-escrever")){ const r = await chamarML("escrever", { id }, FN_EST); txt.value = r.texto; if(r.aviso) toast(r.aviso); bt.textContent="Reescrever"; }
     else if(bt.classList.contains("est-aprovar")){ if(!txt.value.trim()){ toast("Escreva o gancho antes de aprovar."); } else { await chamarML("aprovar", { id, texto: txt.value }, FN_EST); toast("Aprovada: sai com este gancho nos grupos e no Telegram"); carregarEstudio(); } }
     else if(bt.classList.contains("est-rejeitar")){ await chamarML("rejeitar", { id }, FN_EST); card.remove(); }
   }catch(err){ toast(errMsg(err)); }

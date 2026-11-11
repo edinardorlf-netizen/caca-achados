@@ -119,6 +119,57 @@ async function escrever(dono: string, id: string) {
   return { texto, origem, aviso };
 }
 
+// ---------- Roteiro de vídeo (TikTok e Shopee Vídeo) ----------
+function roteiroModelo(o: Oferta): string {
+  const d = descontoDe(o), eco = o.preco_de && d ? Number(o.preco_de) - Number(o.preco_por) : 0;
+  const nome = String(o.titulo).replace(/\s+/g, " ").slice(0, 60);
+  return [
+    "🎬 GANCHO (0–3 s)", d ? `Para tudo: ${nome} com ${d}% de desconto.` : `Olha esse achado: ${nome}.`, "",
+    "🗣️ DESENVOLVIMENTO (3–15 s)", `Mostre o produto de perto. Preço de hoje: ${brl(Number(o.preco_por))}${eco > 0 ? `, ${brl(eco)} mais barato que o preço antigo` : ""}.${o.cupom ? ` Use o cupom ${o.cupom}.` : ""}`, "",
+    "👉 CHAMADA (15–20 s)", "TikTok: link no meu perfil. Shopee Vídeo: toque no produto aqui embaixo. O preço pode mudar, então corre.", "",
+    "📝 LEGENDA", `${d ? `${d}% OFF` : "Achado"}: ${nome}. Por ${brl(Number(o.preco_por))}. Preço pode mudar.`, "",
+    "#achados #promoção #ofertas #desconto #shopee",
+  ].join("\n");
+}
+
+async function roteiroIA(o: Oferta, persona: string, chave: string): Promise<string> {
+  const d = descontoDe(o);
+  const dados = [
+    `Produto: ${String(o.titulo).slice(0, 160)}`, `Loja: ${o.marketplace}`,
+    o.preco_de && d ? `Preço antigo: ${brl(Number(o.preco_de))}` : null, `Preço atual: ${brl(Number(o.preco_por))}`, d ? `Desconto: ${d}%` : null,
+    o.cupom ? `Cupom: ${o.cupom}` : null, o.nota ? `Observação: ${o.nota}` : null,
+  ].filter(Boolean).join("\n");
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": chave, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model: "claude-haiku-5-5", max_tokens: 700,
+      system: `Você escreve roteiros de vídeo curto (20 a 30 segundos) de ofertas para TikTok e Shopee Vídeo, em português do Brasil.\nPersona: ${persona}\nFormato exato, com estes títulos:\n🎬 GANCHO (0–3 s)\n🗣️ DESENVOLVIMENTO (3–15 s)\n👉 CHAMADA (15–20 s)\n📝 LEGENDA\n#hashtags (5 a 8, na última linha)\nRegras: use apenas os dados fornecidos; nunca invente preço, estoque, avaliação, marca, prazo ou benefício do produto; não prometa resultado nem faça alegação de saúde; sem "o mais vendido" ou "últimas unidades". Na chamada, diga "link no meu perfil" (TikTok) e "toque no produto aqui embaixo" (Shopee Vídeo) e avise que o preço pode mudar. Frases curtas, para falar em voz alta. Legenda com até 150 caracteres. Responda só com o roteiro.`,
+      messages: [{ role: "user", content: dados }],
+    }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(`A IA recusou: ${j?.error?.message || `erro ${r.status}`}`);
+  const t = String(j?.content?.[0]?.text || "").trim();
+  if (!t) throw new Error("A IA devolveu um texto vazio.");
+  return t.slice(0, 1800);
+}
+
+async function roteiro(dono: string, id: string) {
+  const { data: o } = await db.from("achados_ofertas").select("*").eq("dono", dono).eq("id", id).maybeSingle();
+  if (!o) throw new Error("Oferta não encontrada.");
+  const { data: c } = await db.from("achados_config").select("est_persona").eq("dono", dono).maybeSingle();
+  const persona = (c?.est_persona || "").trim() || PERSONA_PADRAO;
+  const { data: seg } = await db.from("segredos").select("valor").eq("chave", "anthropic").maybeSingle();
+  let texto: string, origem: "ia" | "modelo" = "modelo", aviso = "";
+  if (seg?.valor) {
+    try { texto = await roteiroIA(o, persona, seg.valor); origem = "ia"; }
+    catch (e) { texto = roteiroModelo(o); aviso = (e as Error).message; }
+  } else { texto = roteiroModelo(o); aviso = "Sem chave da IA: usei um roteiro pronto."; }
+  await db.from("achados_ofertas").update({ est_roteiro: texto, est_em: new Date().toISOString() }).eq("id", id).eq("dono", dono);
+  return { texto, origem, aviso };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
@@ -133,6 +184,8 @@ Deno.serve(async (req) => {
     const id = String(b.id || "");
     if (b.acao === "minerar") return json(await minerar(email));
     if (b.acao === "escrever") return json(await escrever(email, id));
+    if (b.acao === "roteiro") return json(await roteiro(email, id));
+    if (b.acao === "roteiro_salvar") { await db.from("achados_ofertas").update({ est_roteiro: String(b.texto || "").slice(0, 1800) }).eq("id", id).eq("dono", email); return json({ ok: true }); }
     if (b.acao === "aprovar") {
       const patch: Record<string, unknown> = { est_status: "aprovado", est_em: new Date().toISOString() };
       if (typeof b.texto === "string") patch.est_texto = b.texto.replace(/\s+/g, " ").trim().slice(0, 220);
