@@ -62,7 +62,9 @@ async function curto(txt: string) {
 
 // Gera (ou reaproveita) as artes de uma oferta. O nome do arquivo muda quando muda o preço ou o título.
 async function artes(o: Oferta, quais: Modo[] = ["bio", "link"]) {
-  const versao = await curto(`${o.titulo}|${o.preco_de}|${o.preco_por}|${o.cupom || ""}|${o.imagem || ""}|v1`);
+  const { data: dc } = await db.from("achados_config").select("assinatura").eq("dono", o.dono).maybeSingle();
+  const marca = dc?.assinatura || "";
+  const versao = await curto(`${o.titulo}|${o.preco_de}|${o.preco_por}|${o.cupom || ""}|${o.imagem || ""}|${marca}|v1`);
   const caminho = (m: Modo) => `o${o.num}-${m}-${versao}.jpg`;
   const pub = (m: Modo) => db.storage.from("stories").getPublicUrl(caminho(m)).data.publicUrl;
   const atual: Record<Modo, string | null> = { bio: o.story_bio_url, link: o.story_link_url };
@@ -71,7 +73,7 @@ async function artes(o: Oferta, quais: Modo[] = ["bio", "link"]) {
     const rec = await carregarRecursos();
     const foto = await fotoDataUri(o.imagem);
     for (const m of faltam) {
-      const jpg = await gerarArte(o, foto, m, rec);
+      const jpg = await gerarArte(o, foto, m, rec, marca);
       const { error } = await db.storage.from("stories").upload(caminho(m), jpg, { contentType: "image/jpeg", upsert: true, cacheControl: "31536000" });
       if (error) throw new Error(`Erro ao guardar a arte: ${error.message}`);
     }
@@ -226,14 +228,14 @@ async function alertasAgendados() {
 // te manda (no particular do Telegram) a oferta da vez com um botão que abre o WhatsApp com o texto
 // pronto: você só escolhe o grupo/canal e envia.
 const LOJA_WA: Record<string, string> = { shopee: "na Shopee", meli: "no Mercado Livre", amazon: "na Amazon", tiktok: "no TikTok Shop" };
-const curto = (t: string, n = 70) => { const s = String(t || "").replace(/\s+/g, " ").trim(); return s.length <= n ? s : s.slice(0, n).replace(/\s+\S*$/, "") + "…"; };
+const resumir = (t: string, n = 70) => { const s = String(t || "").replace(/\s+/g, " ").trim(); return s.length <= n ? s : s.slice(0, n).replace(/\s+\S*$/, "") + "…"; };
 const cabecalho = (d: number | null) => (d && d >= 60 ? "🚨 PREÇO ABSURDO" : d && d >= 40 ? "🔥 ACHADÃO" : "🛒 ACHADO");
-function textoWhatsApp(o: Oferta, lk: { tg?: string; wa?: string } = {}) {
+function textoWhatsApp(o: Oferta, lk: { tg?: string; wa?: string; nome?: string | null } = {}) {
   const d = descontoDe(o);
   const eco = o.preco_de && d ? Number(o.preco_de) - Number(o.preco_por) : 0;
   return [
     `${cabecalho(d)} ${LOJA_WA[o.marketplace] || ""}`.trim(), "",
-    `*${curto(o.titulo)}*`, "",
+    `*${resumir(o.titulo)}*`, "",
     (o.preco_de && d ? `~De ${brl(Number(o.preco_de))}~\n` : "") + `✅ *Por ${brl(Number(o.preco_por))}*${d ? ` (${d}% OFF)` : ""}`,
     eco > 0 ? `💸 Você economiza ${brl(eco)}` : null,
     o.cupom ? `🎟️ Cupom: *${o.cupom}*` : null,
@@ -244,7 +246,7 @@ function textoWhatsApp(o: Oferta, lk: { tg?: string; wa?: string } = {}) {
     lk.tg ? `✈️ Telegram: ${lk.tg}` : null,
     lk.tg || lk.wa ? "" : null,
     "⚠️ Preço pode mudar",
-    "_O Cara dos Achados_",
+    lk.nome && lk.nome.trim() ? `_${lk.nome.trim()}_` : null,
   ].filter((x) => x !== null).join("\n");
 }
 
@@ -259,8 +261,8 @@ async function proximaParaWhatsApp(dono: string, minDesc: number) {
 
 async function enviarHoraWhatsApp(dono: string, chat: string, o: Oferta, n?: string) {
   const token = await tgToken(dono);
-  const { data: lc } = await db.from("achados_config").select("vit_telegram,vit_whatsapp").eq("dono", dono).maybeSingle();
-  const txt = textoWhatsApp(o, { tg: lc?.vit_telegram || undefined, wa: lc?.vit_whatsapp || undefined });
+  const { data: lc } = await db.from("achados_config").select("vit_telegram,vit_whatsapp,assinatura").eq("dono", dono).maybeSingle();
+  const txt = textoWhatsApp(o, { tg: lc?.vit_telegram || undefined, wa: lc?.vit_whatsapp || undefined, nome: lc?.assinatura });
   const d = descontoDe(o);
   const legenda = [
     `🟢 <b>Hora do WhatsApp</b>${n ? ` (${n})` : ""} · achado #${o.num}${d ? ` · ${d}% OFF` : ""}`, "",
@@ -342,7 +344,9 @@ Deno.serve(async (req) => {
     if (body.acao === "gerar") {
       const o = await oferta();
       const a = await artes(o);
-      return json({ arte_bio: a.bio, arte_link: a.link, num: o.num, link: o.link, vitrine: `${VITRINE}#a${o.num}` });
+      const { data: vc } = await db.from("achados_config").select("vit_slug").eq("dono", email).maybeSingle();
+      const vit = vc?.vit_slug ? `${VITRINE}?c=${encodeURIComponent(vc.vit_slug)}` : VITRINE;
+      return json({ arte_bio: a.bio, arte_link: a.link, num: o.num, link: o.link, vitrine: `${vit}#a${o.num}` });
     }
     if (body.acao === "story_postado") {
       const o = await oferta();

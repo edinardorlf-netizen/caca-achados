@@ -1,8 +1,9 @@
 // =====================================================================
 // Caça Achados · robô do WhatsApp (Supabase Edge Function "achados-zap")
 //
-// Quem chama é o programa que roda no computador (não o app). A chave dele fica em segredos.zap
-// e vai no cabeçalho "x-zap-key". Ele só consegue pedir a próxima leva de ofertas e confirmar o que postou.
+// Quem chama é o programa que roda no computador do cliente (não o app). Cada cliente tem a própria chave,
+// gerada no app; ela vai no cabeçalho "x-zap-key" e o banco guarda só o hash (achados_config.zap_chave_hash).
+// A chave diz de quem é o robô: ele só enxerga e confirma as ofertas daquele cliente.
 //
 //   POST { acao: "proximas", teste?: true }  → devolve as ofertas da vez (respeita horário, intervalo e quantidade)
 //   POST { acao: "confirmar", ids: [...] }   → marca as ofertas como postadas no WhatsApp
@@ -22,7 +23,13 @@ const LOJA: Record<string, string> = { shopee: "na Shopee", meli: "no Mercado Li
 
 const curto = (t: string, n = 70) => { const s = String(t || "").replace(/\s+/g, " ").trim(); return s.length <= n ? s : s.slice(0, n).replace(/\s+\S*$/, "") + "…"; };
 const cabecalho = (d: number | null) => (d && d >= 60 ? "🚨 PREÇO ABSURDO" : d && d >= 40 ? "🔥 ACHADÃO" : "🛒 ACHADO");
-function texto(o: Oferta, lk: { tg?: string; wa?: string } = {}) {
+const assinar = (nome?: string | null) => (nome && nome.trim() ? `_${nome.trim()}_` : null);
+async function sha256(t: string) {
+  const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t));
+  return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+function texto(o: Oferta, lk: { tg?: string; wa?: string; nome?: string | null } = {}) {
   const d = descontoDe(o);
   const eco = o.preco_de && d ? Number(o.preco_de) - Number(o.preco_por) : 0;
   return [
@@ -38,11 +45,11 @@ function texto(o: Oferta, lk: { tg?: string; wa?: string } = {}) {
     lk.tg ? `✈️ Telegram: ${lk.tg}` : null,
     lk.tg || lk.wa ? "" : null,
     "⚠️ Preço pode mudar",
-    "_O Cara dos Achados_",
+    assinar(lk.nome),
   ].filter((x) => x !== null).join("\n");
 }
 
-function textoCupons(cs: Oferta[], lk: { tg?: string; wa?: string } = {}) {
+function textoCupons(cs: Oferta[], lk: { tg?: string; wa?: string; nome?: string | null } = {}) {
   const loja = (LOJA[cs[0].loja] || cs[0].loja || "").replace(/^n[oa] /, "").toUpperCase();
   const links = [...new Set(cs.map((c) => c.link).filter(Boolean))];
   const unico = links.length === 1 && cs.every((c) => c.link === links[0]);
@@ -56,13 +63,13 @@ function textoCupons(cs: Oferta[], lk: { tg?: string; wa?: string } = {}) {
     unico ? `Resgate aqui:\n${links[0]}\n` : null,
     lk.wa ? `👊 Convide amigos e familiares para o grupo!\n${lk.wa}\n` : null,
     "⚠️ Sujeito às regras e à disponibilidade da loja",
-    "_O Cara dos Achados_",
+    assinar(lk.nome),
   ].filter((x) => x !== null).join("\n");
 }
 
 // Uma mensagem de cupons por rodada: pega o cupom que está há mais tempo sem sair (ou nunca saiu, ou saiu há +2 dias)
 // e junta todos os cupons válidos da mesma loja.
-async function cupomDaVez(dono: string, lk: { tg?: string; wa?: string }) {
+async function cupomDaVez(dono: string, lk: { tg?: string; wa?: string; nome?: string | null }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const { data } = await db.from("achados_cupons").select("*").eq("dono", dono).eq("ativo", true).or(`validade.is.null,validade.gte.${hoje}`).limit(100);
   const limite = Date.now() - 48 * 3600 * 1000;
@@ -89,18 +96,19 @@ async function proximas(dono: string, minDesc: number, qtd: number, maxAfil: num
 Deno.serve(async (req) => {
   try {
     if (req.method !== "POST") return json({ erro: "use POST" }, 405);
-    const { data: seg } = await db.from("segredos").select("valor").eq("chave", "zap").maybeSingle();
-    if (!seg || (req.headers.get("x-zap-key") || "") !== seg.valor) return json({ erro: "não autorizado" }, 401);
+    const chave = (req.headers.get("x-zap-key") || "").trim();
+    if (chave.length < 16) return json({ erro: "não autorizado" }, 401);
+    const { data: c } = await db.from("achados_config")
+      .select("dono,assinatura,rec_robo,vit_telegram,vit_whatsapp,zap_ativo,zap_ultimo,wa_qtd,wa_intervalo_min,wa_hora_ini,wa_hora_fim,wa_desconto_min,afiliados_max")
+      .eq("zap_chave_hash", await sha256(chave)).maybeSingle();
+    if (!c) return json({ erro: "Chave do robô inválida. Gere uma chave nova no app (Ajustes > Robô do WhatsApp) e cole no config.env." }, 401);
+    if (!c.rec_robo) return json({ erro: "O robô do WhatsApp é um complemento e não está ativo nesta conta." }, 403);
     const body = await req.json().catch(() => ({}));
-
-    const { data: cfgs } = await db.from("achados_config").select("dono,vit_telegram,vit_whatsapp,zap_ativo,zap_ultimo,wa_qtd,wa_intervalo_min,wa_hora_ini,wa_hora_fim,wa_desconto_min,afiliados_max").limit(1);
-    const c = (cfgs || [])[0];
-    if (!c) return json({ erro: "Sem configuração." }, 404);
 
     if (body.acao === "proximas") {
       if (body.teste) {
         const l = await proximas(c.dono, c.wa_desconto_min, 1, c.afiliados_max);
-        return json({ ofertas: l.map((o: Oferta) => ({ id: o.id, texto: texto(o, { tg: c.vit_telegram || undefined, wa: c.vit_whatsapp || undefined }), imagem: o.imagem || null })), motivo: l.length ? "teste" : "sem ofertas" });
+        return json({ ofertas: l.map((o: Oferta) => ({ id: o.id, texto: texto(o, { tg: c.vit_telegram || undefined, wa: c.vit_whatsapp || undefined, nome: c.assinatura }), imagem: o.imagem || null })), motivo: l.length ? "teste" : "sem ofertas" });
       }
       if (!c.zap_ativo) return json({ ofertas: [], motivo: "desligado" });
       const h = horaSP();
@@ -108,7 +116,7 @@ Deno.serve(async (req) => {
       const intervalo = Math.max(10, Number(c.wa_intervalo_min) || 60);
       if (c.zap_ultimo && Date.now() - Date.parse(c.zap_ultimo) < (intervalo * 60 - 30) * 1000) return json({ ofertas: [], motivo: "aguardando intervalo" });
       const l = await proximas(c.dono, c.wa_desconto_min, Math.max(1, Math.min(30, Number(c.wa_qtd) || 1)), c.afiliados_max);
-      const lk = { tg: c.vit_telegram || undefined, wa: c.vit_whatsapp || undefined };
+      const lk = { tg: c.vit_telegram || undefined, wa: c.vit_whatsapp || undefined, nome: c.assinatura };
       const cupom = await cupomDaVez(c.dono, lk);
       if (l.length || cupom) await db.from("achados_config").update({ zap_ultimo: new Date().toISOString() }).eq("dono", c.dono);
       const saida = l.map((o: Oferta) => ({ id: o.id, texto: texto(o, lk), imagem: o.imagem || null }));

@@ -72,6 +72,13 @@ function lerTexto(txt){
   return {titulo, link:afiliar(url), marketplace:mktDe(url), precoDe:de, precoPor:por, cupom};
 }
 
+// ---------- Conta do cliente: marca e complementos ----------
+let minha = { assinatura:null, hashtag:null, vit_slug:null, vit_logo:null, rec_robo:false, rec_estudio:false, zap_chave_hash:null };
+function aplicarComplementos(){
+  const tab = $("#tab-estudio");
+  tab.innerHTML = minha.rec_estudio ? "Estúdio IA" : `Estúdio IA <span class="selo-breve">em breve</span>`;
+}
+
 // ---------- Posts ----------
 function gerarPost(o, c){
   const d = desc(o), aviso = $("#aviso-afiliado").checked;
@@ -89,11 +96,11 @@ function gerarPost(o, c){
       `👉 ${link}`, "",
       "⚠️ Preço e estoque podem mudar a qualquer momento.",
       aviso ? (o.marketplace==="amazon" ? "🔗 Como associado da Amazon, eu ganho com compras qualificadas." : "🔗 Link de afiliado: posso ganhar comissão, sem custo extra para você.") : null,
-      c==="whatsapp" ? "_O Cara dos Achados_" : "— O Cara dos Achados",
+      minha.assinatura ? (c==="whatsapp" ? `_${minha.assinatura}_` : `— ${minha.assinatura}`) : null,
     ].filter(x=>x!==null).join("\n");
   }
   if(c==="social"){
-    const tags = ["#achadinhos","#ocaradosachados", loja?`#${loja.toLowerCase().replace(/\s/g,"")}`:null, o.categoria?`#${o.categoria.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]/g,"")}`:null, "#promocao","#oferta"].filter(Boolean);
+    const tags = ["#achadinhos", minha.hashtag?`#${minha.hashtag}`:null, loja?`#${loja.toLowerCase().replace(/\s/g,"")}`:null, o.categoria?`#${o.categoria.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]/g,"")}`:null, "#promocao","#oferta"].filter(Boolean);
     return [
       `${o.titulo} por ${brl(o.precoPor)}${d?` (${d}% OFF)`:""} 😱`,
       o.cupom ? `Cupom: ${o.cupom}` : null,
@@ -347,11 +354,23 @@ $("#ig-salvar-agenda").onclick = async () => {
   carregarML();
 };
 function renderWhatsApp(){
+  $("#wa-comp").hidden = !!minha.rec_robo; $("#wa-controles").hidden = !minha.rec_robo; $("#wa-chave-box").hidden = !minha.rec_robo;
+  $("#wa-chave-status").textContent = minha.zap_chave_hash ? "já gerada (está no config.env do seu robô)." : "ainda não gerada. Gere e cole no config.env antes de abrir o robô.";
+  $("#wa-gerar-chave").textContent = minha.zap_chave_hash ? "Gerar chave nova" : "Gerar chave do robô";
   const n = cfgML.wa_qtd ?? 1, cada = cfgML.wa_intervalo_min ?? 60, ini = cfgML.wa_hora_ini ?? 6, fim = cfgML.wa_hora_fim ?? 22;
   $("#wa-status").innerHTML = `<span class="ponto ${cfgML.zap_ativo?"on":""}"></span> ${cfgML.zap_ativo?`<b>Robô ligado</b>: ${n} oferta${n>1?"s":""} a cada ${cada} min, das ${ini}h às ${fim}h (precisa do programa aberto no computador)`:"Robô desligado"}`;
   $("#wa-int").value = cada; $("#wa-n").value = n; $("#wa-ini").value = ini; $("#wa-fim").value = fim; $("#wa-min").value = cfgML.wa_desconto_min ?? 30; $("#wa-ativo").checked = !!cfgML.zap_ativo;
   $("#wa-msg").textContent = cfgML.wa_msg || "";
 }
+$("#wa-gerar-chave").onclick = async () => {
+  if(minha.zap_chave_hash && !confirm("Gerar uma chave nova desliga o robô que está usando a chave atual, até você colar a nova no config.env. Continuar?")) return;
+  const { data, error } = await sb.rpc("achados_gerar_chave_robo");
+  if(error) return toast(error.message);
+  $("#wa-chave-txt").value = data; $("#wa-chave-nova").hidden = false;
+  minha.zap_chave_hash = "nova"; renderWhatsApp();
+  toast("Chave gerada: copie agora, ela não aparece de novo");
+};
+$("#wa-chave-copiar").onclick = async () => { try{ await navigator.clipboard.writeText($("#wa-chave-txt").value); toast("Chave copiada"); }catch{ $("#wa-chave-txt").select(); toast("Selecionei a chave: use Copiar do seu aparelho"); } };
 $("#wa-salvar").onclick = async () => {
   const patch = { wa_intervalo_min: limitar($("#wa-int").value,10,1440,60), wa_qtd: limitar($("#wa-n").value,1,30,1), wa_hora_ini: limitar($("#wa-ini").value,0,23,6), wa_hora_fim: limitar($("#wa-fim").value,1,24,22),
     wa_desconto_min: limitar($("#wa-min").value,0,95,30), zap_ativo: $("#wa-ativo").checked, wa_ativo: false };
@@ -449,10 +468,13 @@ async function chamarML(acao, extra={}, url=FN){
 }
 async function carregarML(){
   const [st, cf, ts, ss, is] = await Promise.all([ sb.rpc("achados_ml_status"),
-    sb.from("achados_config").select("ml_client_id,ml_categorias,ml_categorias_nomes,desconto_min,ml_afiliado_query,ml_afiliado_em,tg_ativo,tg_intervalo_min,tg_qtd,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post,tg_msg,ig_ativo,ig_intervalo_min,ig_hora_ini,ig_hora_fim,ig_desconto_min,ig_ultimo_post,ig_msg,ig_usuario,alerta_ativo,alerta_min,alerta_chat_id,alerta_msg,wa_ativo,zap_ativo,wa_intervalo_min,wa_qtd,wa_hora_ini,wa_hora_fim,wa_desconto_min,wa_ultimo_aviso,wa_msg,shp_app_id,shp_ativo,shp_palavras,shp_top,shp_desconto_min,shp_comissao_min,shp_sinc_em,shp_sinc_ok,shp_sinc_msg,amz_tag,vit_slug,vit_telegram,vit_whatsapp,vit_instagram,vit_tiktok").maybeSingle(),
+    sb.from("achados_config").select("ml_client_id,ml_categorias,ml_categorias_nomes,desconto_min,ml_afiliado_query,ml_afiliado_em,tg_ativo,tg_intervalo_min,tg_qtd,tg_hora_ini,tg_hora_fim,tg_modo,tg_desconto_min,tg_ultimo_post,tg_msg,ig_ativo,ig_intervalo_min,ig_hora_ini,ig_hora_fim,ig_desconto_min,ig_ultimo_post,ig_msg,ig_usuario,alerta_ativo,alerta_min,alerta_chat_id,alerta_msg,wa_ativo,zap_ativo,wa_intervalo_min,wa_qtd,wa_hora_ini,wa_hora_fim,wa_desconto_min,wa_ultimo_aviso,wa_msg,shp_app_id,shp_ativo,shp_palavras,shp_top,shp_desconto_min,shp_comissao_min,shp_sinc_em,shp_sinc_ok,shp_sinc_msg,amz_tag,vit_slug,vit_telegram,vit_whatsapp,vit_instagram,vit_tiktok,assinatura,hashtag,vit_logo,rec_robo,rec_estudio,zap_chave_hash").maybeSingle(),
     sb.rpc("achados_tg_status"), sb.rpc("achados_shp_status"), sb.rpc("achados_ig_status") ]);
   const s = (st.data||[])[0] || {};
   cfgML = cf.data || { ml_categorias:[], ml_categorias_nomes:{}, desconto_min:20 };
+  for(const k of Object.keys(minha)) if(k in cfgML) minha[k] = cfgML[k];
+  aplicarComplementos();
+  $("#mc-nome").value = minha.assinatura || ""; $("#mc-tag").value = minha.hashtag || ""; $("#mc-slug").value = minha.vit_slug || ""; $("#mc-logo").value = minha.vit_logo || "";
   $("#ml-status").innerHTML = s.conectado ? `<span class="ponto on"></span> Conectado${s.nickname?` como <b>${esc(s.nickname)}</b>`:""}`
     : s.tem_app && s.tem_secret ? `<span class="ponto"></span> App salvo. Falta autorizar o acesso no Mercado Livre.` : `<span class="ponto"></span> Ainda não conectado`;
   $("#ml-sinc").textContent = s.sinc_em ? `Última busca: ${new Date(s.sinc_em).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})} · ${s.sinc_msg||""}` : (s.sinc_msg||"");
@@ -464,8 +486,8 @@ async function carregarML(){
   renderCats(s.conectado);
   renderAfiliado(); renderTelegram((ts.data||[])[0] || {}); renderShopee((ss.data||[])[0] || {}); renderInstagram((is.data||[])[0] || {}); renderAlerta(); renderWhatsApp();
   amzTag = cfgML.amz_tag || null; $("#amz-tag").value = amzTag || "";
-  const vurl = new URL("vitrine.html", location.href); if(cfgML.vit_slug && cfgML.vit_slug!=="ocaradosachados") vurl.searchParams.set("c", cfgML.vit_slug);
-  $("#vit-url").value = vurl.toString(); $("#vit-abrir").href = vurl.toString();
+  const vurl = new URL("vitrine.html", location.href); if(cfgML.vit_slug) vurl.searchParams.set("c", cfgML.vit_slug);
+  $("#vit-url").value = cfgML.vit_slug ? vurl.toString() : "Defina o endereço da Vitrine no cartão Sua marca"; $("#vit-abrir").href = vurl.toString(); $("#vit-abrir").hidden = !cfgML.vit_slug;
   ["telegram","whatsapp","instagram","tiktok"].forEach(k=> $("#vit-"+k).value = cfgML["vit_"+k] || "");
   $("#amz-status").innerHTML = amzTag ? `<span class="ponto on"></span> Tag <b>${esc(amzTag)}</b> ativa nos links da Amazon.` : `<span class="ponto"></span> Sem tag: os links da Amazon ficam como você colar.`;
 }
@@ -543,6 +565,19 @@ $("#shp-buscar").onclick = async () => {
   catch(err){ toast(errMsg(err)); }
   b.disabled=false; b.textContent="Buscar agora"; carregarML();
 };
+$("#mc-salvar").onclick = async () => {
+  const nome = $("#mc-nome").value.replace(/\s+/g," ").trim();
+  const tag = $("#mc-tag").value.trim().replace(/^#/,"").toLowerCase();
+  const slug = $("#mc-slug").value.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
+  if(nome && (nome.length<2 || nome.length>40)) return toast("O nome da marca precisa ter de 2 a 40 letras.");
+  if(tag && !/^[a-z0-9_]{2,30}$/.test(tag)) return toast("A hashtag só pode ter letras sem acento, números e _ (ex.: achadosdaana).");
+  if(slug && !/^[a-z0-9-]{3,40}$/.test(slug)) return toast("O endereço da Vitrine precisa ter de 3 a 40 letras ou números (ex.: achados-da-ana).");
+  const logo = $("#mc-logo").value.trim();
+  if(logo && !/^https:\/\/\S+$/i.test(logo)) return toast("O logo precisa ser um link que começa com https://");
+  const { error } = await sb.from("achados_config").update({ assinatura: nome || null, hashtag: tag || null, vit_slug: slug || null, vit_logo: logo || null }).eq("dono", await souDono());
+  if(error) return toast(/vit_slug_key|duplicate/i.test(error.message) ? "Esse endereço da Vitrine já está em uso. Escolha outro." : "Não consegui salvar: "+error.message);
+  toast("Marca salva"); carregarML();
+};
 $("#vit-copiar").onclick = async () => { try{ await navigator.clipboard.writeText($("#vit-url").value); toast("Link da Vitrine copiado"); }catch{ $("#vit-url").select(); toast("Selecionei o link: use Copiar do seu aparelho"); } };
 $("#vit-salvar").onclick = async () => {
   const regras = { telegram:/^https:\/\/(t\.me|telegram\.me)\//i, whatsapp:/^https:\/\/(whatsapp\.com|chat\.whatsapp\.com|wa\.me)\//i, instagram:/^https:\/\/(www\.)?instagram\.com\//i, tiktok:/^https:\/\/(www\.)?tiktok\.com\//i };
@@ -562,7 +597,7 @@ $("#vit-salvar").onclick = async () => {
 };
 $("#amz-salvar").onclick = async () => {
   const t = $("#amz-tag").value.trim();
-  if(t && !/^[A-Za-z0-9_-]{3,40}-2\d$/.test(t)) return toast("A tag da Amazon termina em -20 (ex.: ocaradosachados-20).");
+  if(t && !/^[A-Za-z0-9_-]{3,40}-2\d$/.test(t)) return toast("A tag da Amazon termina em -20 (ex.: minhaloja-20).");
   const { data:{ user } } = await sb.auth.getUser();
   const { error } = await sb.from("achados_config").update({ amz_tag: t || null }).eq("dono", (user?.email||"").toLowerCase());
   if(error) return toast("Não consegui salvar: "+error.message);
@@ -871,7 +906,12 @@ function mostrar(v){
   ["cacar","fila","cupons","estudio","postadas","ajustes"].forEach(k=>{ $("#v-"+k).hidden = k!==v; $("#tab-"+k).setAttribute("aria-selected", k===v); });
   try{ localStorage.setItem("ca-aba", v); }catch{}
   if(v==="ajustes") carregarML();
-  if(v==="estudio") carregarEstudio();
+  if(v==="estudio"){
+    const ok = !!minha.rec_estudio;
+    $("#est-breve").hidden = ok; $("#est-sub").hidden = !ok;
+    ["minerador","personagem","videos"].forEach(k=>{ if(!ok) $("#es-"+k).hidden = true; });
+    if(ok) carregarEstudio();
+  }
   if(v==="cupons") carregarCupons();
 }
 document.querySelector("nav.abas").addEventListener("click",(e)=>{ const b=e.target.closest("button[data-v]"); if(b) mostrar(b.dataset.v); });
@@ -917,8 +957,14 @@ async function entrar(session){
     toast({ "#ml-ok":"Mercado Livre conectado! Escolha as categorias e o desconto mínimo.", "#ml-expirou":"A autorização demorou demais. Toque em Conectar de novo.", "#ml-recusado":"A autorização foi recusada no Mercado Livre.", "#ml-erro":"Não consegui concluir a conexão. Veja a mensagem na tela." }[h] || "");
     history.replaceState(null, "", location.pathname);
   }
+  try{
+    await sb.rpc("achados_garantir_config");
+    const { data } = await sb.from("achados_config").select("amz_tag,assinatura,hashtag,vit_slug,vit_logo,rec_robo,rec_estudio,zap_chave_hash").maybeSingle();
+    amzTag = data?.amz_tag || null;
+    for(const k of Object.keys(minha)) if(data && k in data) minha[k] = data[k];
+  }catch{}
+  aplicarComplementos();
   mostrar(aba);
-  try{ const { data } = await sb.from("achados_config").select("amz_tag").maybeSingle(); amzTag = data?.amz_tag || null; }catch{}
   await carregarOfertas(); ouvir(); carregarCfgWA();
 }
 let ultimoUsuario = undefined;

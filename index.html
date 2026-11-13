@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Caça Achados</title>
-<meta name="description" content="Promoções de afiliado prontas para postar · O Cara dos Achados">
+<meta name="description" content="Caça Achados: promoções de afiliado prontas para postar">
 <meta name="theme-color" content="#16140F">
 <link rel="manifest" href="manifest.webmanifest?v=2">
 <link rel="icon" href="logo-192.png?v=2" type="image/png">
@@ -17,7 +17,7 @@
 <body>
 <div class="login" id="v-login" hidden>
   <form class="card" id="f-login" novalidate>
-    <div class="marca"><div class="selo"><img src="logo.png" alt="O Cara dos Achados" width="56" height="56"></div><div><h1>Caça Achados</h1><p>um sistema Auraxis</p></div></div>
+    <div class="marca"><div class="selo"><img src="logo.png" alt="Caça Achados" width="56" height="56"></div><div><h1>Caça Achados</h1><p>um sistema Auraxis</p></div></div>
     <p class="hint" id="l-dica">Entre com seu e-mail e senha do Caça Achados.</p>
     <label class="f" for="l-email">E-mail<input class="in" id="l-email" type="email" autocomplete="email" required></label>
     <label class="f" for="l-senha">Senha<input class="in" id="l-senha" type="password" autocomplete="current-password" minlength="8" required></label>
@@ -31,7 +31,7 @@
 <div class="wrap" id="v-app" hidden>
   <header class="top">
     <div class="marca">
-      <div class="selo"><img src="logo.png" alt="O Cara dos Achados" width="56" height="56"></div>
+      <div class="selo"><img src="logo.png" alt="Caça Achados" width="56" height="56"></div>
       <div><h1>Caça Achados</h1><p>Promoções de Shopee, Mercado Livre, Amazon e TikTok Shop prontas para postar</p></div>
     </div>
     <div class="row"><button class="btn amarelo" id="btn-nova" type="button">+ Nova oferta</button><button class="btn ghost sm" id="btn-sair" type="button">Sair</button></div>
@@ -145,14 +145,26 @@
     </div>
     <div class="layout" style="margin-top:14px">
       <div class="card">
+        <h2>Sua marca</h2>
+        <p class="hint">É o nome que assina as suas mensagens no Telegram e no WhatsApp, aparece nas artes dos Stories e no título da sua Vitrine.</p>
+        <div class="fgrid">
+          <label class="f w2" for="mc-nome">Nome da marca<input class="in" id="mc-nome" maxlength="40" autocomplete="off" placeholder="ex.: Achados da Ana"></label>
+          <label class="f" for="mc-tag">Hashtag (sem #)<input class="in" id="mc-tag" maxlength="30" autocomplete="off" placeholder="ex.: achadosdaana"></label>
+          <label class="f" for="mc-slug">Endereço da Vitrine<input class="in" id="mc-slug" maxlength="40" autocomplete="off" placeholder="ex.: achados-da-ana"></label>
+          <label class="f w2" for="mc-logo">Logo da Vitrine (link da imagem, opcional)<input class="in" id="mc-logo" inputmode="url" autocomplete="off" placeholder="https://…/meu-logo.png"></label>
+        </div>
+        <div class="row"><button class="btn amarelo" id="mc-salvar" type="button">Salvar marca</button></div>
+        <p class="hint" id="mc-msg"></p>
+      </div>
+      <div class="card">
         <h2>Canais de divulgação</h2>
         <p class="hint">Esses links aparecem na sua <b>Vitrine</b>, a página pública com os achados postados nos últimos 7 dias (e os que você aprovar). Use a Vitrine como <b>link na bio</b> do Instagram e do TikTok.</p>
         <div class="row" style="flex-wrap:nowrap"><input class="in" id="vit-url" readonly><button class="btn sm" id="vit-copiar" type="button">Copiar</button><a class="btn ghost sm" id="vit-abrir" target="_blank" rel="noopener">Abrir</a></div>
         <div class="fgrid">
-          <label class="f w2" for="vit-telegram">Canal do Telegram<input class="in" id="vit-telegram" inputmode="url" placeholder="https://t.me/ocaradosachados"></label>
+          <label class="f w2" for="vit-telegram">Canal do Telegram<input class="in" id="vit-telegram" inputmode="url" placeholder="https://t.me/seucanal"></label>
           <label class="f w2" for="vit-whatsapp">Canal do WhatsApp<input class="in" id="vit-whatsapp" inputmode="url" placeholder="https://whatsapp.com/channel/…"></label>
-          <label class="f w2" for="vit-instagram">Instagram<input class="in" id="vit-instagram" inputmode="url" placeholder="https://instagram.com/ocaradosachados"></label>
-          <label class="f w2" for="vit-tiktok">TikTok<input class="in" id="vit-tiktok" inputmode="url" placeholder="https://www.tiktok.com/@ocaradosachados01"></label>
+          <label class="f w2" for="vit-instagram">Instagram<input class="in" id="vit-instagram" inputmode="url" placeholder="https://instagram.com/seuperfil"></label>
+          <label class="f w2" for="vit-tiktok">TikTok<input class="in" id="vit-tiktok" inputmode="url" placeholder="https://www.tiktok.com/@seuperfil"></label>
         </div>
         <div class="row"><button class="btn amarelo" id="vit-salvar" type="button">Salvar canais</button></div>
       </div>
@@ -178,7 +190,7 @@
         </ol>
         <form id="f-tg" class="fgrid" style="margin-top:10px" novalidate>
           <label class="f" for="tg-token">Token do bot<input class="in" id="tg-token" type="password" autocomplete="off" placeholder="Deixe em branco para manter"></label>
-          <label class="f" for="tg-chat">Canal ou grupo<input class="in" id="tg-chat" autocomplete="off" placeholder="@ocaradosachados"></label>
+          <label class="f" for="tg-chat">Canal ou grupo<input class="in" id="tg-chat" autocomplete="off" placeholder="@seucanal"></label>
           <div class="f" style="justify-content:flex-end"><button class="btn" type="submit" id="tg-salvar">Salvar e testar</button></div>
         </form>
         <div class="fgrid" style="margin-top:12px">
@@ -223,7 +235,7 @@
         <p class="hint" id="al-status">Carregando…</p>
         <p class="hint">Quando entrar uma oferta com desconto alto, o seu bot do Telegram te manda <b>em particular</b> a arte do Story com o quadro “TOQUE NO LINK AQUI” e o link. Você posta no celular e põe a figurinha de link por cima (uns 20 segundos).</p>
         <ol class="passos">
-          <li>No Telegram, abra o seu bot <a id="al-bot" href="https://t.me/ocaradosachados_bot" target="_blank" rel="noopener">@ocaradosachados_bot</a> e toque em <b>Iniciar</b>.</li>
+          <li>No Telegram, abra o <b>seu bot</b> (o mesmo que você criou para postar no canal) e toque em <b>Iniciar</b>.</li>
           <li>Volte aqui e toque em <b>Vincular minha conversa</b>.</li>
         </ol>
         <div class="row"><button class="btn" id="al-vincular" type="button">Vincular minha conversa</button><button class="btn ghost" id="al-testar" type="button">Mandar um aviso de teste</button></div>
@@ -240,6 +252,18 @@
         <h2>Robô do WhatsApp</h2>
         <p class="hint" id="wa-status">Carregando…</p>
         <p class="hint">O <b>robô</b> é o programa que fica aberto no seu computador (janela preta do INICIAR). Ele lê estas configurações a cada minuto e posta as ofertas no(s) grupo(s) do WhatsApp. Se o computador dormir ou a janela fechar, ele para.</p>
+        <div class="aviso-comp" id="wa-comp" hidden>
+          <b>Complemento não contratado.</b> O robô do WhatsApp é vendido à parte. Ele usa um método não oficial do WhatsApp, que pode bloquear o número usado: por isso só é liberado depois que você aceita esse risco na compra.
+        </div>
+        <div id="wa-chave-box" hidden>
+          <p class="hint"><b>Chave do robô:</b> <span id="wa-chave-status"></span></p>
+          <div class="row"><button class="btn ghost sm" id="wa-gerar-chave" type="button">Gerar chave do robô</button></div>
+          <div id="wa-chave-nova" hidden>
+            <p class="hint">Copie agora e cole no arquivo <code>config.env</code> do robô, na linha <code>CHAVE=</code>. Ela não aparece de novo.</p>
+            <div class="row" style="flex-wrap:nowrap"><input class="in" id="wa-chave-txt" readonly><button class="btn sm" id="wa-chave-copiar" type="button">Copiar</button></div>
+          </div>
+        </div>
+        <div id="wa-controles">
         <div class="fgrid" style="margin-top:8px">
           <label class="f" for="wa-int">Enviar a cada (min)<input class="in" id="wa-int" type="number" min="10" max="1440" step="5"></label>
           <label class="f" for="wa-n">Ofertas por envio<input class="in" id="wa-n" type="number" min="1" max="30"></label>
@@ -250,6 +274,7 @@
         <label class="row" style="font-size:14px;gap:6px;margin-top:8px"><input type="checkbox" id="wa-ativo"> Robô do WhatsApp ligado</label>
         <div class="row"><button class="btn amarelo" id="wa-salvar" type="button">Salvar</button><button class="btn ghost" id="wa-agora" type="button">Mandar uma agora</button></div>
         <p class="hint" id="wa-msg"></p>
+        </div>
       </div>
       <div class="card">
         <h2>Dicas para não perder o número</h2>
@@ -331,6 +356,10 @@
 
   <!-- ESTÚDIO IA -->
   <section id="v-estudio" hidden>
+    <div class="card aviso-comp" id="est-breve" hidden>
+      <h2>Estúdio IA · em desenvolvimento</h2>
+      <p>O Estúdio IA (minerador de produtos, personagem e roteiros de vídeo) ainda está sendo aperfeiçoado. Ele vai chegar como um complemento, e você vai poder contratar quando estiver pronto.</p>
+    </div>
     <div class="row" id="est-sub" role="group" aria-label="Estúdio IA">
       <button class="chip" type="button" data-s="minerador" aria-pressed="true">Minerador de produtos</button>
       <button class="chip" type="button" data-s="personagem" aria-pressed="false">Personagem</button>

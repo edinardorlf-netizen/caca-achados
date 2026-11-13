@@ -134,3 +134,8 @@ a.btn[aria-disabled="true"]{opacity:.5;pointer-events:none}
 .wa-btn{background:#25D366;color:#0B2E17;border-color:#25D366;font-weight:700}
 .wa-cont{grid-column:1/-1;font-size:12px;margin:0}
 @media (max-width:640px){.wa-faixa{grid-template-columns:56px 1fr}.wa-thumb{width:56px;height:56px}.wa-acoes{grid-column:1/-1}.wa-acoes .wa-btn{flex:1;text-align:center}}
+
+/* Complementos (robô, Estúdio IA) ainda não contratados ou em desenvolvimento */
+.aviso-comp{background:var(--yellow-soft);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.45;margin:8px 0}
+.aviso-comp h2{margin-top:0}
+.selo-breve{font-size:10px;font-weight:600;background:var(--yellow-soft);color:var(--ink-2);border-radius:999px;padding:1px 6px;margin-left:4px;vertical-align:middle}

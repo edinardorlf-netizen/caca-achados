@@ -1,7 +1,7 @@
 {
   "name": "Caça Achados",
   "short_name": "Achados",
-  "description": "Promoções de afiliado prontas para postar · O Cara dos Achados",
+  "description": "Caça Achados: promoções de afiliado prontas para postar",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

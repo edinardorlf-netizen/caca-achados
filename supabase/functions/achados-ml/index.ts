@@ -273,7 +273,7 @@ const LOJA: Record<string, string> = { shopee: "na Shopee", meli: "no Mercado Li
 const curto = (t: string, n = 70) => { const s = String(t || "").replace(/\s+/g, " ").trim(); return s.length <= n ? s : s.slice(0, n).replace(/\s+\S*$/, "") + "…"; };
 const cabecalho = (d: number | null) => (d && d >= 60 ? "🚨 PREÇO ABSURDO" : d && d >= 40 ? "🔥 ACHADÃO" : "🛒 ACHADO");
 // deno-lint-ignore no-explicit-any
-function postTelegram(o: any, lk: { tg?: string; wa?: string } = {}) {
+function postTelegram(o: any, lk: { tg?: string; wa?: string; nome?: string | null } = {}) {
   const d = descontoDe(o);
   const eco = o.preco_de && d ? Number(o.preco_de) - Number(o.preco_por) : 0;
   const linhas = [
@@ -290,7 +290,7 @@ function postTelegram(o: any, lk: { tg?: string; wa?: string } = {}) {
     lk.wa ? `💬 WhatsApp: ${escHtml(lk.wa)}` : null,
     lk.tg || lk.wa ? "" : null,
     "⚠️ Preço pode mudar",
-    "— O Cara dos Achados",
+    lk.nome && lk.nome.trim() ? `— ${escHtml(lk.nome.trim())}` : null,
   ];
   return linhas.filter((x) => x !== null).join("\n");
 }
@@ -314,8 +314,8 @@ async function configTg(dono: string) {
 
 // deno-lint-ignore no-explicit-any
 async function enviarOferta(dono: string, token: string, chat: string, o: any) {
-  const { data: lc } = await db.from("achados_config").select("vit_telegram,vit_whatsapp").eq("dono", dono).maybeSingle();
-  const texto = postTelegram(o, { tg: lc?.vit_telegram || undefined, wa: lc?.vit_whatsapp || undefined });
+  const { data: lc } = await db.from("achados_config").select("vit_telegram,vit_whatsapp,assinatura").eq("dono", dono).maybeSingle();
+  const texto = postTelegram(o, { tg: lc?.vit_telegram || undefined, wa: lc?.vit_whatsapp || undefined, nome: lc?.assinatura });
   try {
     if (o.imagem && texto.length <= 1024) await tg(token, "sendPhoto", { chat_id: chat, photo: o.imagem, caption: texto, parse_mode: "HTML" });
     else throw new Error("sem foto");
@@ -471,7 +471,7 @@ Deno.serve(async (req) => {
       const { token, cfg } = await configTg(email);
       const bot = await tg(token, "getMe", {});
       const chat = await tg(token, "getChat", { chat_id: cfg.tg_chat_id });
-      await tg(token, "sendMessage", { chat_id: cfg.tg_chat_id, text: "✅ Caça Achados conectado. As ofertas vão aparecer aqui.\n— O Cara dos Achados" });
+      await tg(token, "sendMessage", { chat_id: cfg.tg_chat_id, text: "✅ Caça Achados conectado. As ofertas vão aparecer aqui." });
       const nome = chat.title || chat.username || String(chat.id);
       await db.from("achados_config").update({ tg_chat_nome: nome, tg_msg: `Conectado: @${bot.username} → ${nome}` }).eq("dono", email);
       return json({ ok: true, bot: bot.username, chat: nome });

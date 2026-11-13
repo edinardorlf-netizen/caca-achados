@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>O Cara dos Achados · Vitrine</title>
-<meta name="description" content="Os achados e promoções do dia selecionados pelo O Cara dos Achados: Shopee, Mercado Livre, Amazon e mais.">
+<title>Achados do dia · Vitrine</title>
+<meta name="description" content="Os achados e promoções do dia: Shopee, Mercado Livre, Amazon e mais.">
 <meta name="theme-color" content="#16140F">
-<meta property="og:title" content="O Cara dos Achados · Achados do dia">
+<meta property="og:title" content="Achados do dia">
 <meta property="og:description" content="Promoções selecionadas todo dia. Toque e aproveite.">
 <link rel="icon" href="logo-192.png?v=2" type="image/png">
 <link rel="apple-touch-icon" href="logo-192.png?v=2">
@@ -75,7 +75,7 @@ main{max-width:1080px;margin:0 auto;padding:16px max(16px,env(safe-area-inset-le
 <header class="topo">
   <div class="in">
     <div class="marca">
-      <div class="selo"><img src="logo.png" alt="O Cara dos Achados" width="64" height="64"></div>
+      <div class="selo"><img id="v-logo" src="logo.png" alt="" width="64" height="64"></div>
       <div><h1>Achados do dia</h1><p>Promoções selecionadas todo dia. Toque e aproveite antes que acabe.</p></div>
     </div>
     <nav class="canais" id="canais" aria-label="Canais"></nav>
@@ -130,10 +130,13 @@ function render(){
 }
 
 async function carregar(){
+  // Sem "?c=" abre a vitrine do cliente nº 1 (links antigos já publicados na bio continuam funcionando).
   const slug = (new URLSearchParams(location.search).get("c") || "ocaradosachados").toLowerCase();
   const { data, error } = await sb.rpc("achados_vitrine", { p_slug: slug });
   if (error || !data?.perfil) { $("#grade").innerHTML = `<div class="vazio">Não consegui carregar os achados agora. Tente de novo em instantes.</div>`; return; }
   const p = data.perfil;
+  if (p.nome) { document.title = `${p.nome} · Achados do dia`; $("#v-logo").alt = p.nome; }
+  if (p.logo && /^https:\/\//.test(p.logo)) $("#v-logo").src = p.logo;
   const canais = [["telegram","Telegram",p.telegram,true],["whatsapp","WhatsApp",p.whatsapp,true],["instagram","Instagram",p.instagram],["tiktok","TikTok",p.tiktok]].filter((c) => c[2]);
   $("#canais").innerHTML = canais.map(([k, n, u, dest]) => `<a class="canal${dest ? " dest" : ""}" href="${esc(linkSeguro(u))}" target="_blank" rel="noopener">${ICONES[k]}${dest ? `Entrar no ${n}` : n}</a>`).join("");
   $("#canais").hidden = !canais.length;

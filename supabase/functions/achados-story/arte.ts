@@ -31,7 +31,7 @@ const img = (src: string, style: Record<string, unknown>): El => ({ type: "img",
 
 let wasmPronto = false;
 
-export async function gerarArte(o: Oferta, foto: string | null, modo: Modo, r: Recursos): Promise<Uint8Array> {
+export async function gerarArte(o: Oferta, foto: string | null, modo: Modo, r: Recursos, marca = ""): Promise<Uint8Array> {
   if (!wasmPronto) { await initWasm(r.wasm); wasmPronto = true; }
   const d = descontoDe(o);
   const [lojaNome, lojaCor] = LOJA[o.marketplace] || LOJA.outro;
@@ -43,7 +43,7 @@ export async function gerarArte(o: Oferta, foto: string | null, modo: Modo, r: R
     // Topo: marca + loja
     h("div", { width: "100%", justifyContent: "space-between", alignItems: "center" },
       h("div", { flexDirection: "column" },
-        h("div", { fontSize: 30, fontWeight: 900, color: AMARELO, letterSpacing: 2 }, "O CARA DOS ACHADOS"),
+        marca.trim() ? h("div", { fontSize: 30, fontWeight: 900, color: AMARELO, letterSpacing: 2 }, marca.trim().toUpperCase().slice(0, 40)) : null,
         h("div", { fontSize: 64, fontWeight: 900, lineHeight: 1, marginTop: 6 }, d && d >= 40 ? "ACHADÃO!" : "ACHADO DO DIA"),
       ),
       h("div", { background: lojaCor, color: lojaCor === "#FFE600" || lojaCor === "#FFFFFF" || lojaCor === "#FF9900" ? PRETO : "#fff", fontSize: 30, fontWeight: 700, padding: "14px 26px", borderRadius: 999 }, lojaNome),

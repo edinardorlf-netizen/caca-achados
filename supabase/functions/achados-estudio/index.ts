@@ -23,7 +23,7 @@ const brl = (v: number | null) => (v == null ? "" : Number(v).toLocaleString("pt
 // deno-lint-ignore no-explicit-any
 type Linha = any;
 
-const PERSONA_PADRAO = "O Cara dos Achados: direto, bem-humorado e brasileiro. Fala como um amigo que avisa de promoção boa. Frases curtas. Nunca promete estoque, prazo ou preço futuro.";
+const PERSONA_PADRAO = "Caçador de achados: direto, bem-humorado e brasileiro. Fala como um amigo que avisa de promoção boa. Frases curtas. Nunca promete estoque, prazo ou preço futuro.";
 
 // ---------- Nota ----------
 function nota(p: Linha): { nota: number; motivos: string[] } {
@@ -203,6 +203,8 @@ Deno.serve(async (req) => {
     if (!email) return json({ erro: "Faça login novamente." }, 401);
     const { data: dono } = await db.from("achados_donos").select("email").eq("email", email).maybeSingle();
     if (!dono) return json({ erro: "Seu acesso ao Caça Achados não está liberado." }, 403);
+    const { data: rec } = await db.from("achados_config").select("rec_estudio").eq("dono", email).maybeSingle();
+    if (!rec?.rec_estudio) return json({ erro: "O Estúdio IA ainda está em desenvolvimento e vai chegar como complemento." }, 403);
 
     const b = await req.json().catch(() => ({}));
     if (b.acao === "minerar") return json(await minerar(email));
