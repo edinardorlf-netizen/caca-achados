@@ -122,9 +122,45 @@ function misturar(normais: Oferta[], camp: Oferta[], qtd: number, k: number) {
   return out;
 }
 
+// ---------- Vigia (cron a cada 5 min): avisa no Telegram quando o robô para de dar sinal e quando volta ----------
+const hhmm = (ms: number) => new Date(ms).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+async function vigia() {
+  const { data: cs } = await db.from("achados_config")
+    .select("dono,zap_visto_em,zap_vigia_estado,alerta_chat_id,wa_hora_ini,wa_hora_fim").eq("rec_robo", true).eq("zap_ativo", true);
+  const res: Record<string, string> = {};
+  const h = horaSP();
+  for (const c of cs || []) {
+    const visto = c.zap_visto_em ? Date.parse(c.zap_visto_em) : 0;
+    const parado = Date.now() - visto > 10 * 60 * 1000;
+    const noHorario = h >= c.wa_hora_ini && h < c.wa_hora_fim;
+    let msg: string | null = null, estado: string | null = c.zap_vigia_estado;
+    if (parado && noHorario && estado !== "parado") {
+      estado = "parado";
+      msg = `⚠️ O robô do WhatsApp parou de dar sinal${visto ? ` (último sinal às ${hhmm(visto)})` : ""}. Confira se o computador está ligado e a janela do robô aberta.`;
+    } else if (!parado && estado === "parado") {
+      estado = null;
+      msg = "✅ O robô do WhatsApp voltou a funcionar.";
+    }
+    if (msg) {
+      await db.from("achados_config").update({ zap_vigia_estado: estado, zap_vigia_em: new Date().toISOString() }).eq("dono", c.dono);
+      try {
+        const { data: tok } = await db.rpc("achados_tg_token", { p_dono: c.dono });
+        if (tok && c.alerta_chat_id) await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: c.alerta_chat_id, text: msg }) });
+      } catch (_) { /* o aviso é só um extra */ }
+    }
+    res[c.dono] = estado || (noHorario ? "ok" : "fora do horário");
+  }
+  return res;
+}
+
 Deno.serve(async (req) => {
   try {
     if (req.method !== "POST") return json({ erro: "use POST" }, 405);
+    if (new URL(req.url).searchParams.get("tarefa") === "vigia") {
+      const { data: seg } = await db.from("segredos").select("valor").eq("chave", "cron").maybeSingle();
+      if (!seg || (req.headers.get("x-cron-key") || "") !== seg.valor) return json({ erro: "não autorizado" }, 401);
+      return json(await vigia());
+    }
     const chave = (req.headers.get("x-zap-key") || "").trim();
     if (chave.length < 16) return json({ erro: "não autorizado" }, 401);
     const { data: c } = await db.from("achados_config")
@@ -132,6 +168,7 @@ Deno.serve(async (req) => {
       .eq("zap_chave_hash", await sha256(chave)).maybeSingle();
     if (!c) return json({ erro: "Chave do robô inválida. Gere uma chave nova no app (Ajustes > Robô do WhatsApp) e cole no config.env." }, 401);
     if (!c.rec_robo) return json({ erro: "O robô do WhatsApp é um complemento e não está ativo nesta conta." }, 403);
+    await db.from("achados_config").update({ zap_visto_em: new Date().toISOString() }).eq("dono", c.dono); // sinal de vida para a vigia
     const body = await req.json().catch(() => ({}));
 
     if (body.acao === "proximas") {
