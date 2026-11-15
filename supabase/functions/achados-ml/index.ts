@@ -328,8 +328,30 @@ async function enviarOferta(dono: string, token: string, chat: string, o: any) {
   await db.from("achados_config").update({ tg_ultimo_post: agora, tg_msg: `Postado: ${String(o.titulo).slice(0, 80)}` }).eq("dono", dono);
 }
 
-async function proximaOferta(dono: string, modo: string, minDesc: number) {
+// ---------- Campanha (ex.: brinquedos até 22/12): uma parte fixa de cada rodada, espalhada no meio das outras ----------
+type Campanha = { fracao: number; filtro_categoria: string; desconto_min: number };
+async function campanhaAtiva(dono: string): Promise<Campanha | null> {
+  const { data } = await db.from("achados_campanha").select("fracao,filtro_categoria,desconto_min").eq("dono", dono)
+    .gt("ate", new Date().toISOString()).gt("fracao", 0).limit(1).maybeSingle();
+  return data || null;
+}
+// deno-lint-ignore no-explicit-any
+const mesmaCategoria = (o: any, c: Campanha) => String(o.categoria || "").toLowerCase().includes(c.filtro_categoria.replace(/%/g, "").toLowerCase());
+// deno-lint-ignore no-explicit-any
+const ehDaCampanha = (o: any, c: Campanha) => mesmaCategoria(o, c) && !/cesto|organizador/i.test(String(o.titulo)) && (descontoDe(o) || 0) >= c.desconto_min;
+// Posição i (0..qtd-1) da rodada é da campanha? Ex.: 4 em 15 → posições 4, 8, 12, 15.
+const vezDaCampanha = (i: number, qtd: number, k: number) => Math.floor(((i + 1) * k) / qtd) > Math.floor((i * k) / qtd);
+
+// quer: "camp" = só da campanha, "normal" = sem os da campanha, null = qualquer uma (sem campanha ativa)
+async function proximaOferta(dono: string, modo: string, minDesc: number, camp: Campanha | null = null, quer: "camp" | "normal" | null = null) {
   const hoje = new Date().toISOString().slice(0, 10);
+  if (camp && quer === "camp") {
+    const { data: cd } = await db.from("achados_ofertas").select("*").eq("dono", dono).not("link", "is", null).eq("exemplo", false)
+      .in("status", ["nova", "aprovada"]).ilike("categoria", camp.filtro_categoria).or(`validade.is.null,validade.gte.${hoje}`).limit(300);
+    // deno-lint-ignore no-explicit-any
+    const l = (cd || []).filter((o: any) => ehDaCampanha(o, camp)).sort((a: any, b: any) => pontuacao(b) - pontuacao(a));
+    return l[0] || null;
+  }
   let q = db.from("achados_ofertas").select("*").eq("dono", dono).not("link", "is", null).eq("exemplo", false)
     .or(`validade.is.null,validade.gte.${hoje}`).limit(300);
   q = modo === "aprovadas" ? q.eq("status", "aprovada") : q.in("status", ["nova", "aprovada"]);
@@ -337,7 +359,8 @@ async function proximaOferta(dono: string, modo: string, minDesc: number) {
   // deno-lint-ignore no-explicit-any
   const { data: cf } = await db.from("achados_config").select("afiliados_max").eq("dono", dono).maybeSingle();
   const maxAfil = cf?.afiliados_max || null;
-  const lst = (data || []).filter((o: any) => ((descontoDe(o) || 0) >= minDesc || !!o.cupom) && !(maxAfil && o.afiliados != null && o.afiliados > maxAfil));
+  const lst = (data || []).filter((o: any) => ((descontoDe(o) || 0) >= minDesc || !!o.cupom) && !(maxAfil && o.afiliados != null && o.afiliados > maxAfil)
+    && !(camp && quer === "normal" && mesmaCategoria(o, camp)));
   // deno-lint-ignore no-explicit-any
   lst.sort((a: any, b: any) => (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
   return lst[0] || null;
@@ -357,9 +380,16 @@ async function postarAgendado() {
       if (h < cfg.tg_hora_ini || h >= cfg.tg_hora_fim) { res[dono] = "fora do horário"; continue; }
       if (cfg.tg_ultimo_post && Date.now() - Date.parse(cfg.tg_ultimo_post) < (cfg.tg_intervalo_min * 60 - 30) * 1000) { res[dono] = "aguardando intervalo"; continue; }
       const qtd = Math.max(1, Math.min(30, Number(cfg.tg_qtd) || 1));
+      const camp = await campanhaAtiva(dono);
+      const k = camp ? Math.round(qtd * Number(camp.fracao)) : 0;
       let feitos = 0;
       for (let i = 0; i < qtd; i++) {
-        const o = await proximaOferta(dono, cfg.tg_modo, cfg.tg_desconto_min);
+        let o;
+        if (camp) {
+          const quer = vezDaCampanha(i, qtd, k) ? "camp" : "normal";
+          o = await proximaOferta(dono, cfg.tg_modo, cfg.tg_desconto_min, camp, quer)
+            || await proximaOferta(dono, cfg.tg_modo, cfg.tg_desconto_min, camp, quer === "camp" ? "normal" : "camp");
+        } else o = await proximaOferta(dono, cfg.tg_modo, cfg.tg_desconto_min);
         if (!o) break;
         if (i > 0) await sleep(1500); // o Telegram limita as mensagens por minuto
         await enviarOferta(dono, token, cfg.tg_chat_id, o);

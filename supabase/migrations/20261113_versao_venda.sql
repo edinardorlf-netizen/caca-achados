@@ -124,3 +124,10 @@ alter table public.achados_config
 grant update (vit_logo) on public.achados_config to authenticated;
 update public.achados_config set vit_logo = 'https://edinardorlf-netizen.github.io/caca-achados/marcas/ocaradosachados.png'
  where dono = 'edinardorlf@gmail.com' and vit_logo is null;
+
+-- 15/11/2026 · Campanha de brinquedos (pedido dos membros do grupo), até 22/12:
+-- tabela achados_campanha + busca diária na Shopee (achados_campanha_buscar/processar, pg_cron),
+-- subcategorias de brinquedo do Mercado Livre durante a campanha (saem em achados_campanha_encerrar, 23/12),
+-- e em cada rodada do WhatsApp e do Telegram uma fração fixa (25%) vem da campanha, espalhada no meio das outras.
+-- Colunas novas em achados_ofertas: campanha, campanha_em. Aplicado direto no banco pelas migrações
+-- campanha_brinquedos, campanha_brinquedos_marcador, campanha_brinquedos_todas_plataformas, campanha_brinquedos_mistura.
