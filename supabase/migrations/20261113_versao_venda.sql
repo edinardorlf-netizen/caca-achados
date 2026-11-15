@@ -131,3 +131,8 @@ update public.achados_config set vit_logo = 'https://edinardorlf-netizen.github.
 -- e em cada rodada do WhatsApp e do Telegram uma fração fixa (25%) vem da campanha, espalhada no meio das outras.
 -- Colunas novas em achados_ofertas: campanha, campanha_em. Aplicado direto no banco pelas migrações
 -- campanha_brinquedos, campanha_brinquedos_marcador, campanha_brinquedos_todas_plataformas, campanha_brinquedos_mistura.
+
+-- 15/11/2026 (tarde) · Segunda campanha "festas-nov2026" (Natal e formatura) até 22/12: ordem 2, 2/3 das vagas que sobram
+-- depois dos brinquedos (WhatsApp 20 = 5 brinquedos + 10 festas + 5 normais). Busca na Shopee uma palavra por vez
+-- (pedidos simultâneos recebem erro 10000), a cada 20 min das 6h às 20h; itens gravados com categoria "Festas: Natal e Formatura".
+-- Migrações: campanha_festas_natal_formatura, campanha_busca_uma_por_vez(_corrige).

@@ -90,36 +90,48 @@ async function proximas(dono: string, minDesc: number, qtd: number, maxAfil: num
     .is("wa_avisado_em", null).in("status", ["nova", "aprovada", "postada"]).or(`validade.is.null,validade.gte.${hoje}`).limit(400);
   const lst = (data || []).filter((o: Oferta) => ((descontoDe(o) || 0) >= minDesc || !!o.cupom) && !(o.canais || []).includes("whatsapp") && !(maxAfil && o.afiliados != null && o.afiliados > maxAfil));
   lst.sort((a: Oferta, b: Oferta) => (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
-  // Campanha ativa (ex.: brinquedos até 22/12): uma parte fixa de cada rodada, espalhada no meio das outras ofertas
-  const camp = await campanhaAtiva(dono);
-  if (!camp) return lst.slice(0, qtd);
-  const { data: cd } = await db.from("achados_ofertas").select("*").eq("dono", dono).not("link", "is", null).eq("exemplo", false)
-    .is("wa_avisado_em", null).in("status", ["nova", "aprovada", "postada"]).ilike("categoria", camp.filtro_categoria)
-    .or(`validade.is.null,validade.gte.${hoje}`).limit(300);
-  const daCamp = (cd || []).filter((o: Oferta) => ehDaCampanha(o, camp) && !(o.canais || []).includes("whatsapp")).sort((a: Oferta, b: Oferta) => pontuacao(b) - pontuacao(a));
-  const normais = lst.filter((o: Oferta) => !mesmaCategoria(o, camp));
-  return misturar(normais, daCamp, qtd, Math.round(qtd * Number(camp.fracao)));
+  // Campanhas ativas (ex.: brinquedos e festas até 22/12): partes fixas de cada rodada, espalhadas no meio das outras ofertas
+  const camps = await campanhasAtivas(dono);
+  if (!camps.length) return lst.slice(0, qtd);
+  const filas: Record<string, Oferta[]> = {};
+  for (const c of camps) {
+    const { data: cd } = await db.from("achados_ofertas").select("*").eq("dono", dono).not("link", "is", null).eq("exemplo", false)
+      .is("wa_avisado_em", null).in("status", ["nova", "aprovada", "postada"]).ilike("categoria", c.filtro_categoria)
+      .or(`validade.is.null,validade.gte.${hoje}`).limit(400);
+    filas[c.id] = (cd || []).filter((o: Oferta) => ehDaCampanha(o, c) && !(o.canais || []).includes("whatsapp"))
+      .sort((a: Oferta, b: Oferta) => (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
+  }
+  filas.normal = lst.filter((o: Oferta) => !camps.some((c) => mesmaCategoria(o, c)));
+  const out: Oferta[] = [];
+  for (const vaga of planoDaRodada(qtd, camps)) {
+    const o = filas[vaga].shift() || filas.normal.shift() || camps.map((c) => filas[c.id].shift()).find(Boolean);
+    if (o) out.push(o);
+  }
+  return out;
 }
 
-// ---------- Campanha (ex.: brinquedos) ----------
-type Campanha = { fracao: number; filtro_categoria: string; desconto_min: number };
-async function campanhaAtiva(dono: string): Promise<Campanha | null> {
-  const { data } = await db.from("achados_campanha").select("fracao,filtro_categoria,desconto_min").eq("dono", dono)
-    .gt("ate", new Date().toISOString()).gt("fracao", 0).limit(1).maybeSingle();
-  return data || null;
+// ---------- Campanhas (ex.: brinquedos; Natal e formatura) ----------
+type Campanha = { id: string; fracao: number; filtro_categoria: string; desconto_min: number; ordem: number };
+async function campanhasAtivas(dono: string): Promise<Campanha[]> {
+  const { data } = await db.from("achados_campanha").select("id,fracao,filtro_categoria,desconto_min,ordem").eq("dono", dono)
+    .gt("ate", new Date().toISOString()).gt("fracao", 0).order("ordem");
+  return data || [];
 }
 const mesmaCategoria = (o: Oferta, c: Campanha) => String(o.categoria || "").toLowerCase().includes(c.filtro_categoria.replace(/%/g, "").toLowerCase());
 const ehDaCampanha = (o: Oferta, c: Campanha) => mesmaCategoria(o, c) && !/cesto|organizador/i.test(String(o.titulo)) && (descontoDe(o) || 0) >= c.desconto_min;
-// Espalha k itens da campanha numa rodada de qtd (ex.: 5 em 20 → posições 4, 8, 12, 16, 20). Se faltar de um lado, completa com o outro.
-function misturar(normais: Oferta[], camp: Oferta[], qtd: number, k: number) {
-  const out: Oferta[] = []; let a = 0, b = 0;
-  for (let i = 0; i < qtd; i++) {
-    const vez = Math.floor(((i + 1) * k) / qtd) > Math.floor((i * k) / qtd);
-    if (vez && b < camp.length) out.push(camp[b++]);
-    else if (a < normais.length) out.push(normais[a++]);
-    else if (b < camp.length) out.push(camp[b++]);
+const vez = (i: number, n: number, k: number) => Math.floor(((i + 1) * k) / n) > Math.floor((i * k) / n);
+// Diz de quem é cada vaga da rodada. Cada campanha, na ordem, pega a sua fração das vagas que sobraram, espalhadas.
+// Ex. 20 vagas: brinquedos 25% → 5; festas 2/3 das 15 restantes → 10; 5 normais.
+function planoDaRodada(qtd: number, camps: Campanha[]) {
+  const vagas: string[] = Array(qtd).fill("normal");
+  let livres = [...Array(qtd).keys()];
+  for (const c of camps) {
+    const n = livres.length, k = Math.round(n * Number(c.fracao));
+    const pegas = livres.filter((_, i) => vez(i, n, k));
+    pegas.forEach((p) => (vagas[p] = c.id));
+    livres = livres.filter((p) => !pegas.includes(p));
   }
-  return out;
+  return vagas;
 }
 
 // ---------- Vigia (cron a cada 5 min): avisa no Telegram quando o robô para de dar sinal e quando volta ----------

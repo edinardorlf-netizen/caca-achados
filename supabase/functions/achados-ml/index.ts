@@ -328,28 +328,40 @@ async function enviarOferta(dono: string, token: string, chat: string, o: any) {
   await db.from("achados_config").update({ tg_ultimo_post: agora, tg_msg: `Postado: ${String(o.titulo).slice(0, 80)}` }).eq("dono", dono);
 }
 
-// ---------- Campanha (ex.: brinquedos até 22/12): uma parte fixa de cada rodada, espalhada no meio das outras ----------
-type Campanha = { fracao: number; filtro_categoria: string; desconto_min: number };
-async function campanhaAtiva(dono: string): Promise<Campanha | null> {
-  const { data } = await db.from("achados_campanha").select("fracao,filtro_categoria,desconto_min").eq("dono", dono)
-    .gt("ate", new Date().toISOString()).gt("fracao", 0).limit(1).maybeSingle();
-  return data || null;
+// ---------- Campanhas (ex.: brinquedos; Natal e formatura até 22/12): partes fixas de cada rodada, espalhadas ----------
+type Campanha = { id: string; fracao: number; filtro_categoria: string; desconto_min: number; ordem: number };
+async function campanhasAtivas(dono: string): Promise<Campanha[]> {
+  const { data } = await db.from("achados_campanha").select("id,fracao,filtro_categoria,desconto_min,ordem").eq("dono", dono)
+    .gt("ate", new Date().toISOString()).gt("fracao", 0).order("ordem");
+  return data || [];
 }
 // deno-lint-ignore no-explicit-any
 const mesmaCategoria = (o: any, c: Campanha) => String(o.categoria || "").toLowerCase().includes(c.filtro_categoria.replace(/%/g, "").toLowerCase());
 // deno-lint-ignore no-explicit-any
 const ehDaCampanha = (o: any, c: Campanha) => mesmaCategoria(o, c) && !/cesto|organizador/i.test(String(o.titulo)) && (descontoDe(o) || 0) >= c.desconto_min;
-// Posição i (0..qtd-1) da rodada é da campanha? Ex.: 4 em 15 → posições 4, 8, 12, 15.
-const vezDaCampanha = (i: number, qtd: number, k: number) => Math.floor(((i + 1) * k) / qtd) > Math.floor((i * k) / qtd);
+const vez = (i: number, n: number, k: number) => Math.floor(((i + 1) * k) / n) > Math.floor((i * k) / n);
+// Diz de quem é cada vaga da rodada. Cada campanha, na ordem, pega a sua fração das vagas que sobraram, espalhadas.
+function planoDaRodada(qtd: number, camps: Campanha[]) {
+  const vagas: string[] = Array(qtd).fill("normal");
+  let livres = [...Array(qtd).keys()];
+  for (const c of camps) {
+    const n = livres.length, k = Math.round(n * Number(c.fracao));
+    const pegas = livres.filter((_, i) => vez(i, n, k));
+    pegas.forEach((p) => (vagas[p] = c.id));
+    livres = livres.filter((p) => !pegas.includes(p));
+  }
+  return vagas;
+}
 
-// quer: "camp" = só da campanha, "normal" = sem os da campanha, null = qualquer uma (sem campanha ativa)
-async function proximaOferta(dono: string, modo: string, minDesc: number, camp: Campanha | null = null, quer: "camp" | "normal" | null = null) {
+// quer: id de uma campanha = só dela; "normal" = sem as das campanhas; null = qualquer uma (sem campanha ativa)
+async function proximaOferta(dono: string, modo: string, minDesc: number, camps: Campanha[] = [], quer: string | null = null) {
   const hoje = new Date().toISOString().slice(0, 10);
-  if (camp && quer === "camp") {
+  const camp = camps.find((c) => c.id === quer);
+  if (camp) {
     const { data: cd } = await db.from("achados_ofertas").select("*").eq("dono", dono).not("link", "is", null).eq("exemplo", false)
-      .in("status", ["nova", "aprovada"]).ilike("categoria", camp.filtro_categoria).or(`validade.is.null,validade.gte.${hoje}`).limit(300);
+      .in("status", ["nova", "aprovada"]).ilike("categoria", camp.filtro_categoria).or(`validade.is.null,validade.gte.${hoje}`).limit(400);
     // deno-lint-ignore no-explicit-any
-    const l = (cd || []).filter((o: any) => ehDaCampanha(o, camp)).sort((a: any, b: any) => pontuacao(b) - pontuacao(a));
+    const l = (cd || []).filter((o: any) => ehDaCampanha(o, camp)).sort((a: any, b: any) => (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
     return l[0] || null;
   }
   let q = db.from("achados_ofertas").select("*").eq("dono", dono).not("link", "is", null).eq("exemplo", false)
@@ -360,7 +372,7 @@ async function proximaOferta(dono: string, modo: string, minDesc: number, camp: 
   const { data: cf } = await db.from("achados_config").select("afiliados_max").eq("dono", dono).maybeSingle();
   const maxAfil = cf?.afiliados_max || null;
   const lst = (data || []).filter((o: any) => ((descontoDe(o) || 0) >= minDesc || !!o.cupom) && !(maxAfil && o.afiliados != null && o.afiliados > maxAfil)
-    && !(camp && quer === "normal" && mesmaCategoria(o, camp)));
+    && !(quer === "normal" && camps.some((c) => mesmaCategoria(o, c))));
   // deno-lint-ignore no-explicit-any
   lst.sort((a: any, b: any) => (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
   return lst[0] || null;
@@ -380,15 +392,17 @@ async function postarAgendado() {
       if (h < cfg.tg_hora_ini || h >= cfg.tg_hora_fim) { res[dono] = "fora do horário"; continue; }
       if (cfg.tg_ultimo_post && Date.now() - Date.parse(cfg.tg_ultimo_post) < (cfg.tg_intervalo_min * 60 - 30) * 1000) { res[dono] = "aguardando intervalo"; continue; }
       const qtd = Math.max(1, Math.min(30, Number(cfg.tg_qtd) || 1));
-      const camp = await campanhaAtiva(dono);
-      const k = camp ? Math.round(qtd * Number(camp.fracao)) : 0;
+      const camps = await campanhasAtivas(dono);
+      const plano = planoDaRodada(qtd, camps);
       let feitos = 0;
       for (let i = 0; i < qtd; i++) {
-        let o;
-        if (camp) {
-          const quer = vezDaCampanha(i, qtd, k) ? "camp" : "normal";
-          o = await proximaOferta(dono, cfg.tg_modo, cfg.tg_desconto_min, camp, quer)
-            || await proximaOferta(dono, cfg.tg_modo, cfg.tg_desconto_min, camp, quer === "camp" ? "normal" : "camp");
+        let o = null;
+        if (camps.length) {
+          // a vaga é da campanha; se ela não tiver item, vai para uma normal; se nem isso, para outra campanha
+          for (const quer of [plano[i], "normal", ...camps.map((c) => c.id)]) {
+            o = await proximaOferta(dono, cfg.tg_modo, cfg.tg_desconto_min, camps, quer);
+            if (o) break;
+          }
         } else o = await proximaOferta(dono, cfg.tg_modo, cfg.tg_desconto_min);
         if (!o) break;
         if (i > 0) await sleep(1500); // o Telegram limita as mensagens por minuto
