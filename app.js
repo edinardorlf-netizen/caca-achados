@@ -358,7 +358,7 @@ function renderWhatsApp(){
   $("#wa-chave-status").textContent = minha.zap_chave_hash ? "já gerada (está no config.env do seu robô)." : "ainda não gerada. Gere e cole no config.env antes de abrir o robô.";
   $("#wa-gerar-chave").textContent = minha.zap_chave_hash ? "Gerar chave nova" : "Gerar chave do robô";
   const n = cfgML.wa_qtd ?? 1, cada = cfgML.wa_intervalo_min ?? 60, ini = cfgML.wa_hora_ini ?? 6, fim = cfgML.wa_hora_fim ?? 22;
-  $("#wa-status").innerHTML = `<span class="ponto ${cfgML.zap_ativo?"on":""}"></span> ${cfgML.zap_ativo?`<b>Robô ligado</b>: ${n} oferta${n>1?"s":""} a cada ${cada} min, das ${ini}h às ${fim}h (precisa do programa aberto no computador)`:"Robô desligado"}`;
+  $("#wa-status").innerHTML = `<span class="ponto ${cfgML.zap_ativo?"on":""}"></span> ${cfgML.zap_ativo?`<b>Robô ligado</b>: ${n} oferta${n>1?"s":""} a cada ${cada} min, das ${ini}h às ${fim}h${fim < ini ? " do dia seguinte" : ""} (precisa do programa aberto no computador)`:"Robô desligado"}`;
   $("#wa-int").value = cada; $("#wa-n").value = n; $("#wa-ini").value = ini; $("#wa-fim").value = fim; $("#wa-min").value = cfgML.wa_desconto_min ?? 30; $("#wa-ativo").checked = !!cfgML.zap_ativo;
   $("#wa-msg").textContent = cfgML.wa_msg || "";
 }
@@ -374,10 +374,10 @@ $("#wa-chave-copiar").onclick = async () => { try{ await navigator.clipboard.wri
 $("#wa-salvar").onclick = async () => {
   const patch = { wa_intervalo_min: limitar($("#wa-int").value,10,1440,60), wa_qtd: limitar($("#wa-n").value,1,30,1), wa_hora_ini: limitar($("#wa-ini").value,0,23,6), wa_hora_fim: limitar($("#wa-fim").value,1,24,22),
     wa_desconto_min: limitar($("#wa-min").value,0,95,30), zap_ativo: $("#wa-ativo").checked, wa_ativo: false };
-  if(patch.wa_hora_fim <= patch.wa_hora_ini) return toast("A hora final precisa ser depois da inicial.");
+  if(patch.wa_hora_fim === patch.wa_hora_ini) return toast("A hora final precisa ser diferente da inicial.");
   const { error } = await sb.from("achados_config").update(patch).eq("dono", await souDono());
   if(error) return toast("Não consegui salvar: "+error.message);
-  toast(patch.zap_ativo ? `Robô do WhatsApp: ${patch.wa_qtd} oferta(s) a cada ${patch.wa_intervalo_min} min, das ${patch.wa_hora_ini}h às ${patch.wa_hora_fim}h` : "Robô do WhatsApp desligado"); carregarML();
+  toast(patch.zap_ativo ? `Robô do WhatsApp: ${patch.wa_qtd} oferta(s) a cada ${patch.wa_intervalo_min} min, das ${patch.wa_hora_ini}h às ${patch.wa_hora_fim}h${patch.wa_hora_fim < patch.wa_hora_ini ? " do dia seguinte" : ""}` : "Robô do WhatsApp desligado"); carregarML();
 };
 $("#wa-agora").onclick = async () => {
   const b=$("#wa-agora"); b.disabled=true; $("#wa-msg").textContent="Mandando…";

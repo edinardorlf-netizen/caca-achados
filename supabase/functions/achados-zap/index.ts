@@ -83,6 +83,10 @@ async function cupomDaVez(dono: string, lk: { tg?: string; wa?: string; nome?: s
 function horaSP() {
   return Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hourCycle: "h23" }).format(new Date()));
 }
+// Horário de postagem. Aceita virar a meia-noite: das 6 às 4 = das 6h até as 4h da manhã seguinte.
+function noHorario(h: number, ini: number, fim: number) {
+  return ini < fim ? h >= ini && h < fim : h >= ini || h < fim;
+}
 
 async function proximas(dono: string, minDesc: number, qtd: number, maxAfil: number | null = null) {
   const hoje = new Date().toISOString().slice(0, 10);
@@ -144,9 +148,9 @@ async function vigia() {
   for (const c of cs || []) {
     const visto = c.zap_visto_em ? Date.parse(c.zap_visto_em) : 0;
     const parado = Date.now() - visto > 10 * 60 * 1000;
-    const noHorario = h >= c.wa_hora_ini && h < c.wa_hora_fim;
+    const dentro = noHorario(h, c.wa_hora_ini, c.wa_hora_fim);
     let msg: string | null = null, estado: string | null = c.zap_vigia_estado;
-    if (parado && noHorario && estado !== "parado") {
+    if (parado && dentro && estado !== "parado") {
       estado = "parado";
       msg = `⚠️ O robô do WhatsApp parou de dar sinal${visto ? ` (último sinal às ${hhmm(visto)})` : ""}. Confira se o computador está ligado e a janela do robô aberta.`;
     } else if (!parado && estado === "parado") {
@@ -160,7 +164,7 @@ async function vigia() {
         if (tok && c.alerta_chat_id) await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: c.alerta_chat_id, text: msg }) });
       } catch (_) { /* o aviso é só um extra */ }
     }
-    res[c.dono] = estado || (noHorario ? "ok" : "fora do horário");
+    res[c.dono] = estado || (dentro ? "ok" : "fora do horário");
   }
   return res;
 }
@@ -190,7 +194,7 @@ Deno.serve(async (req) => {
       }
       if (!c.zap_ativo) return json({ ofertas: [], motivo: "desligado" });
       const h = horaSP();
-      if (h < c.wa_hora_ini || h >= c.wa_hora_fim) return json({ ofertas: [], motivo: "fora do horário" });
+      if (!noHorario(h, c.wa_hora_ini, c.wa_hora_fim)) return json({ ofertas: [], motivo: "fora do horário" });
       const intervalo = Math.max(10, Number(c.wa_intervalo_min) || 60);
       if (c.zap_ultimo && Date.now() - Date.parse(c.zap_ultimo) < (intervalo * 60 - 30) * 1000) return json({ ofertas: [], motivo: "aguardando intervalo" });
       const l = await proximas(c.dono, c.wa_desconto_min, Math.max(1, Math.min(30, Number(c.wa_qtd) || 1)), c.afiliados_max);
