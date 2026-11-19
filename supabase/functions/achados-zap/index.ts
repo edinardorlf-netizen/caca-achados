@@ -88,6 +88,14 @@ function noHorario(h: number, ini: number, fim: number) {
   return ini < fim ? h >= ini && h < fim : h >= ini || h < fim;
 }
 
+// Mensagens em particular pendentes (até 10 por vez, só das últimas 24 h). O texto sai no mesmo formato do grupo.
+async function privadasPendentes(c: Oferta) {
+  const { data } = await db.from("achados_zap_privadas").select("id,numero,oferta,texto").eq("dono", c.dono)
+    .is("enviado_em", null).is("erro", null).gt("criado_em", new Date(Date.now() - 24 * 3600e3).toISOString()).order("id").limit(10);
+  const lk = { tg: c.vit_telegram || undefined, wa: c.vit_whatsapp || undefined, nome: c.assinatura };
+  return (data || []).map((p: Oferta) => ({ id: p.id, numero: p.numero, texto: p.texto || texto(p.oferta || {}, lk), imagem: p.oferta?.imagem || null }));
+}
+
 async function proximas(dono: string, minDesc: number, qtd: number, maxAfil: number | null = null) {
   const hoje = new Date().toISOString().slice(0, 10);
   const { data } = await db.from("achados_ofertas").select("*").eq("dono", dono).not("link", "is", null).eq("exemplo", false)
@@ -188,22 +196,31 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
 
     if (body.acao === "proximas") {
+      // Mensagens em particular (ex.: prévia das ofertas no celular do dono): vão junto em toda resposta, a qualquer hora.
+      const privadas = await privadasPendentes(c);
       if (body.teste) {
         const l = await proximas(c.dono, c.wa_desconto_min, 1, c.afiliados_max);
-        return json({ ofertas: l.map((o: Oferta) => ({ id: o.id, texto: texto(o, { tg: c.vit_telegram || undefined, wa: c.vit_whatsapp || undefined, nome: c.assinatura }), imagem: o.imagem || null })), motivo: l.length ? "teste" : "sem ofertas" });
+        return json({ privadas, ofertas: l.map((o: Oferta) => ({ id: o.id, texto: texto(o, { tg: c.vit_telegram || undefined, wa: c.vit_whatsapp || undefined, nome: c.assinatura }), imagem: o.imagem || null })), motivo: l.length ? "teste" : "sem ofertas" });
       }
-      if (!c.zap_ativo) return json({ ofertas: [], motivo: "desligado" });
+      if (!c.zap_ativo) return json({ privadas, ofertas: [], motivo: "desligado" });
       const h = horaSP();
-      if (!noHorario(h, c.wa_hora_ini, c.wa_hora_fim)) return json({ ofertas: [], motivo: "fora do horário" });
+      if (!noHorario(h, c.wa_hora_ini, c.wa_hora_fim)) return json({ privadas, ofertas: [], motivo: "fora do horário" });
       const intervalo = Math.max(10, Number(c.wa_intervalo_min) || 60);
-      if (c.zap_ultimo && Date.now() - Date.parse(c.zap_ultimo) < (intervalo * 60 - 30) * 1000) return json({ ofertas: [], motivo: "aguardando intervalo" });
+      if (c.zap_ultimo && Date.now() - Date.parse(c.zap_ultimo) < (intervalo * 60 - 30) * 1000) return json({ privadas, ofertas: [], motivo: "aguardando intervalo" });
       const l = await proximas(c.dono, c.wa_desconto_min, Math.max(1, Math.min(30, Number(c.wa_qtd) || 1)), c.afiliados_max);
       const lk = { tg: c.vit_telegram || undefined, wa: c.vit_whatsapp || undefined, nome: c.assinatura };
       const cupom = await cupomDaVez(c.dono, lk);
       if (l.length || cupom) await db.from("achados_config").update({ zap_ultimo: new Date().toISOString() }).eq("dono", c.dono);
       const saida = l.map((o: Oferta) => ({ id: o.id, texto: texto(o, lk), imagem: o.imagem || null }));
       if (cupom) saida.splice(Math.min(1, saida.length), 0, cupom); // o cupom entra logo depois da primeira oferta
-      return json({ ofertas: saida, motivo: saida.length ? "ok" : "sem ofertas" });
+      return json({ privadas, ofertas: saida, motivo: saida.length ? "ok" : "sem ofertas" });
+    }
+    if (body.acao === "confirmar_privada") {
+      const id = Number(body.id);
+      if (!id) return json({ erro: "id inválido" }, 400);
+      await db.from("achados_zap_privadas").update(body.erro ? { erro: String(body.erro).slice(0, 250) } : { enviado_em: new Date().toISOString(), erro: null })
+        .eq("id", id).eq("dono", c.dono);
+      return json({ ok: true });
     }
     if (body.acao === "confirmar") {
       const ids: string[] = Array.isArray(body.ids) ? body.ids.map(String).slice(0, 50) : [];

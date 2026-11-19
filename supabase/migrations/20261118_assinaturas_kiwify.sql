@@ -154,3 +154,8 @@ create or replace function public.achados_teste_kiwify(body jsonb) returns bigin
     body := body, headers := '{"Content-Type":"application/json"}'::jsonb);
 $$;
 revoke all on function public.achados_teste_kiwify(jsonb) from public, anon, authenticated;
+
+-- 19/11/2026 · Mensagens em particular pelo robô do WhatsApp (ex.: prévia das ofertas no celular do dono).
+-- Tabela achados_zap_privadas (dono, numero, oferta|texto, enviado_em, erro); vão junto na resposta "proximas"
+-- e o robô confirma com a ação "confirmar_privada". Robô v4 (zap_codigo) manda essas mensagens e
+-- confere atualização a cada 30 min. Migração aplicada: zap_mensagens_privadas.
