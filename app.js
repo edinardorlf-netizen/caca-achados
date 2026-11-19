@@ -948,7 +948,7 @@ async function entrar(session){
   $("#v-login").hidden = !!session; $("#v-app").hidden = !session;
   if(!session){ ofertas=[]; return; }
   const { data: eu } = await sb.rpc("achados_eu");
-  if(!eu){ $("#v-app").hidden = true; $("#v-login").hidden = false; $("#l-erro").textContent = "Este e-mail não tem acesso ao Caça Achados."; await sb.auth.signOut(); return; }
+  if(!eu){ $("#v-app").hidden = true; $("#v-login").hidden = false; $("#l-erro").textContent = "Este e-mail não tem acesso ao Caça Achados. Entre com o mesmo e-mail usado na compra."; await sb.auth.signOut(); return; }
   let aba = "fila"; try{ aba = localStorage.getItem("ca-aba") || "fila"; }catch{}
   // Volta da autorização do Mercado Livre
   const h = location.hash;
@@ -964,8 +964,25 @@ async function entrar(session){
     for(const k of Object.keys(minha)) if(data && k in data) minha[k] = data[k];
   }catch{}
   aplicarComplementos();
+  avisoAssinatura();
   mostrar(aba);
   await carregarOfertas(); ouvir(); carregarCfgWA();
+}
+// Aviso no topo quando a assinatura atrasou, foi cancelada ou as automações foram pausadas por falta de pagamento.
+async function avisoAssinatura(){
+  let el = document.getElementById("aviso-assinatura");
+  if(!el){ el = document.createElement("div"); el.id = "aviso-assinatura"; el.style.cssText = "margin:10px 12px 0;padding:12px 14px;border-radius:12px;font-size:14px;line-height:1.4;background:#FFF4CC;color:#3A2E00;border:1px solid #F2D16B"; $("#v-app").prepend(el); }
+  el.hidden = true;
+  try{
+    const { data: a } = await sb.rpc("achados_minha_assinatura");
+    if(!a || a.status === "vitalicio") return;
+    const dia = (d) => d ? new Date(d).toLocaleDateString("pt-BR") : "";
+    let msg = "";
+    if(a.pausado) msg = "Suas automações estão pausadas porque a assinatura não está em dia. Seus dados continuam salvos: assim que o pagamento for confirmado na Kiwify, tudo volta a funcionar sozinho, do jeito que estava.";
+    else if(a.status === "atrasado") msg = `O pagamento da sua assinatura não foi aprovado. Atualize a forma de pagamento na Kiwify até ${dia(a.tolerancia_ate)} para as automações não pararem.`;
+    else if(a.status === "cancelado") msg = `Sua assinatura foi cancelada. As automações funcionam até ${dia(a.tolerancia_ate)}; para continuar depois disso, assine de novo.`;
+    if(msg){ el.textContent = msg; el.hidden = false; }
+  }catch{}
 }
 let ultimoUsuario = undefined;
 sb.auth.onAuthStateChange((_ev, session) => {
