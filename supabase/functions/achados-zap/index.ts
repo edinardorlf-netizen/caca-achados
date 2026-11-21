@@ -197,7 +197,8 @@ Deno.serve(async (req) => {
 
     if (body.acao === "proximas") {
       // Mensagens em particular (ex.: prévia das ofertas no celular do dono): vão junto em toda resposta, a qualquer hora.
-      const privadas = await privadasPendentes(c);
+      // (robô v5 em diante pede "sem_privadas" e busca pela ação "privadas", senão mandaria duas vezes)
+      const privadas = body.sem_privadas ? [] : await privadasPendentes(c);
       if (body.teste) {
         const l = await proximas(c.dono, c.wa_desconto_min, 1, c.afiliados_max);
         return json({ privadas, ofertas: l.map((o: Oferta) => ({ id: o.id, texto: texto(o, { tg: c.vit_telegram || undefined, wa: c.vit_whatsapp || undefined, nome: c.assinatura }), imagem: o.imagem || null })), motivo: l.length ? "teste" : "sem ofertas" });
@@ -215,6 +216,8 @@ Deno.serve(async (req) => {
       if (cupom) saida.splice(Math.min(1, saida.length), 0, cupom); // o cupom entra logo depois da primeira oferta
       return json({ privadas, ofertas: saida, motivo: saida.length ? "ok" : "sem ofertas" });
     }
+    // v5 do robô: pergunta a cada 20 s só pelas mensagens em particular, para mandar na hora (mesmo no meio de uma rodada).
+    if (body.acao === "privadas") return json({ privadas: await privadasPendentes(c) });
     if (body.acao === "confirmar_privada") {
       const id = Number(body.id);
       if (!id) return json({ erro: "id inválido" }, 400);
