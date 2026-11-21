@@ -1,0 +1,32 @@
+ROBÔ DE STORIES DO INSTAGRAM (Caça Achados) — com a figurinha de link
+=====================================================================
+
+O que faz: a cada 2 horas (das 9h às 21h, ajustável no app) posta 5 Stories com as melhores
+ofertas, um a cada 4 a 9 minutos. Cada Story sai com a figurinha de LINK em cima do quadro
+"TOQUE NO LINK AQUI", já com o seu link de afiliado.
+
+ATENÇÃO: usa um jeito NÃO oficial de entrar no Instagram. O Instagram pode pedir login de novo,
+bloquear as postagens por um tempo ou até desativar a conta. Você aceitou esse risco.
+
+INSTALAR (uma vez, no DESKTOP, onde roda o robô do WhatsApp)
+1. Copie esta pasta para C:\CacaAchados\robo-stories (ou onde preferir).
+2. Dê dois cliques em INSTALAR.bat.
+   - Ele instala o Python (se faltar) e as bibliotecas.
+   - Pede para você ARRASTAR o arquivo config.env da pasta do robô do WhatsApp para a janela
+     (ele copia só a chave, sem mostrar na tela).
+   - Cria o atalho para ligar sozinho quando o Windows abrir.
+   - Abre o CONECTAR-INSTAGRAM: digite usuário, senha e o código que o Instagram mandar.
+     A senha NÃO fica guardada; fica só a sessão (como no celular).
+3. Dê dois cliques em TESTE-STORY.bat: posta 1 Story agora. Confira no Instagram se a
+   figurinha ficou em cima do quadro amarelo.
+4. Dê dois cliques em INICIAR-STORIES-OCULTO.vbs para ligar (ou reinicie o computador).
+
+NO DIA A DIA
+- VER-LOG-STORIES.bat: mostra o que o robô está fazendo.
+- PARAR-STORIES.bat: para só o robô de Stories.
+- Se o Instagram pedir login de novo, chega um aviso no Telegram. Abra CONECTAR-INSTAGRAM.bat,
+  entre de novo, e o robô volta sozinho.
+- Se o Instagram bloquear as postagens, o robô avisa e espera 6 horas antes de tentar de novo.
+- Agenda (de quanto em quanto tempo, horário, desconto mínimo): no app, Ajustes > Instagram.
+
+Não use o robô em dois computadores ao mesmo tempo.

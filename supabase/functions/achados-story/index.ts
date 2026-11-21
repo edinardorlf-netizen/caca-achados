@@ -313,6 +313,71 @@ async function whatsappAgendado() {
   return res;
 }
 
+// ---------- Robô de Stories (programa no computador do dono, com a figurinha de link) ----------
+// O robô usa a mesma chave do robô do WhatsApp (cabeçalho x-zap-key; o banco guarda só o hash).
+//   { acao: "story_proximas" }          → rodada da vez: até ig_qtd ofertas com a arte "TOQUE NO LINK AQUI"
+//   { acao: "story_teste" }             → 1 oferta agora, sem mexer na agenda
+//   { acao: "story_confirmar", id, erro? } → marca o Story como postado (ou guarda o erro)
+//   { acao: "story_aviso", mensagem }   → avisa o dono no Telegram (ex.: o Instagram pediu login de novo)
+const noHorario = (h: number, ini: number, fim: number) => (ini < fim ? h >= ini && h < fim : h >= ini || h < fim);
+async function sha256hex(t: string) {
+  const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t));
+  return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+async function listaParaStory(dono: string, minDesc: number, qtd: number) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const { data } = await db.from("achados_ofertas").select("*").eq("dono", dono).not("link", "is", null).eq("exemplo", false)
+    .is("ig_postado_em", null).is("story_em", null).in("status", ["nova", "aprovada", "postada"]).or(`validade.is.null,validade.gte.${hoje}`).limit(300);
+  const lst = (data || []).filter((o: Oferta) => (descontoDe(o) || 0) >= minDesc);
+  lst.sort((a: Oferta, b: Oferta) => (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
+  return lst.slice(0, qtd);
+}
+async function roboStory(chave: string, body: Oferta) {
+  if (chave.length < 16) return json({ erro: "não autorizado" }, 401);
+  const { data: c } = await db.from("achados_config")
+    .select("dono,rec_robo,ig_robo_ativo,ig_qtd,ig_intervalo_min,ig_hora_ini,ig_hora_fim,ig_desconto_min,ig_rodada_em,alerta_chat_id")
+    .eq("zap_chave_hash", await sha256hex(chave)).maybeSingle();
+  if (!c) return json({ erro: "Chave do robô inválida (use a mesma do robô do WhatsApp)." }, 401);
+  if (!c.rec_robo) return json({ erro: "O robô não está ativo nesta conta." }, 403);
+  const saida = async (lst: Oferta[]) => {
+    const out = [];
+    for (const o of lst) {
+      try { const { link } = await artes(o, ["link"]); out.push({ id: o.id, num: o.num, titulo: o.titulo, link: o.link, arte: link }); }
+      catch (e) { await db.from("achados_config").update({ ig_msg: `Arte do #${o.num} falhou: ${(e as Error).message}`.slice(0, 300) }).eq("dono", c.dono); }
+    }
+    return out;
+  };
+
+  if (body.acao === "story_teste") return json({ ofertas: await saida(await listaParaStory(c.dono, 0, 1)), motivo: "teste" });
+  if (body.acao === "story_proximas") {
+    if (!c.ig_robo_ativo) return json({ ofertas: [], motivo: "desligado" });
+    if (!noHorario(horaSP(), c.ig_hora_ini, c.ig_hora_fim)) return json({ ofertas: [], motivo: "fora do horário" });
+    const intervalo = Math.max(30, Number(c.ig_intervalo_min) || 120);
+    if (c.ig_rodada_em && Date.now() - Date.parse(c.ig_rodada_em) < (intervalo * 60 - 30) * 1000) return json({ ofertas: [], motivo: "aguardando intervalo" });
+    const lst = await listaParaStory(c.dono, Number(c.ig_desconto_min) || 0, Math.max(1, Math.min(10, Number(c.ig_qtd) || 5)));
+    if (!lst.length) { await db.from("achados_config").update({ ig_msg: "Robô de Stories: nenhuma oferta nova com link e desconto suficiente." }).eq("dono", c.dono); return json({ ofertas: [], motivo: "sem ofertas" }); }
+    await db.from("achados_config").update({ ig_rodada_em: new Date().toISOString() }).eq("dono", c.dono);
+    return json({ ofertas: await saida(lst), motivo: "ok" });
+  }
+  if (body.acao === "story_confirmar") {
+    const id = String(body.id || "");
+    if (body.erro) { await db.from("achados_config").update({ ig_msg: `Robô de Stories: ${String(body.erro)}`.slice(0, 300) }).eq("dono", c.dono); return json({ ok: true }); }
+    const { data: o } = await db.from("achados_ofertas").select("id,num,titulo,canais").eq("dono", c.dono).eq("id", id).maybeSingle();
+    if (!o) return json({ erro: "Oferta não encontrada." }, 404);
+    const agora = new Date().toISOString();
+    await db.from("achados_ofertas").update({ ig_postado_em: agora, story_em: agora, canais: [...new Set([...(o.canais || []), "instagram"])] }).eq("id", o.id);
+    await db.from("achados_config").update({ ig_ultimo_post: agora, ig_msg: `Story com link publicado pelo robô: #${o.num} ${String(o.titulo).slice(0, 60)}` }).eq("dono", c.dono);
+    return json({ ok: true });
+  }
+  if (body.acao === "story_aviso") {
+    const msg = String(body.mensagem || "").slice(0, 600);
+    await db.from("achados_config").update({ ig_msg: `Robô de Stories: ${msg}`.slice(0, 300) }).eq("dono", c.dono);
+    try { if (c.alerta_chat_id) await tg(await tgToken(c.dono), "sendMessage", { chat_id: c.alerta_chat_id, text: `📸 Robô de Stories: ${msg}` }); } catch (_) { /* aviso é extra */ }
+    return json({ ok: true });
+  }
+  return json({ erro: "Ação desconhecida." }, 400);
+}
+
 // ---------- Entrada ----------
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -326,6 +391,9 @@ Deno.serve(async (req) => {
       if (tarefa !== "postar") return json({ erro: "tarefa desconhecida" }, 400);
       return json({ stories: await storyAgendado(), alertas: await alertasAgendados(), whatsapp: await whatsappAgendado() });
     }
+
+    const zapKey = (req.headers.get("x-zap-key") || "").trim();
+    if (zapKey) return await roboStory(zapKey, await req.json().catch(() => ({})));
 
     const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
     const { data: u } = await db.auth.getUser(token);
