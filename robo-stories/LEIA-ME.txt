@@ -20,6 +20,8 @@ INSTALAR (uma vez, no DESKTOP, onde roda o robô do WhatsApp)
 3. Dê dois cliques em TESTE-STORY.bat: posta 1 Story agora. Confira no Instagram se a
    figurinha ficou em cima do quadro amarelo.
 4. Dê dois cliques em INICIAR-STORIES-OCULTO.vbs para ligar (ou reinicie o computador).
+   O INSTALAR já agenda o robô no Windows (AGENDAR-STORIES.bat): liga sozinho, sem janela,
+   ao entrar no Windows e às 05:55, igual ao robô do WhatsApp. Para tirar: DESAGENDAR-STORIES.bat.
 
 ATUALIZA SOZINHO (versão 3 em diante)
 - A cada 30 minutos o robô pergunta ao servidor se há versão nova. Se houver, troca o robo_stories.py
