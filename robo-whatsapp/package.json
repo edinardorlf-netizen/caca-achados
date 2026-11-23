@@ -1,0 +1,15 @@
+{
+  "name": "robo-zap-achados",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "robo.js",
+  "dependencies": {
+    "@whiskeysockets/baileys": "6.7.24",
+    "pino": "^9.0.0",
+    "qrcode": "^1.5.4"
+  },
+  "overrides": {
+    "libsignal": "https://codeload.github.com/WhiskeySockets/libsignal-node/tar.gz/refs/heads/master"
+  }
+}

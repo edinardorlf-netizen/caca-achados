@@ -1,0 +1,23 @@
+ROBÔ DO WHATSAPP - CAÇA ACHADOS (complemento)
+
+ATENÇÃO: o robô usa um método não oficial do WhatsApp. O WhatsApp pode bloquear o número usado.
+Use um número secundário, nunca o número principal do seu negócio.
+
+1) Instale o Node.js (versão LTS) em nodejs.org, se ainda não tiver.
+2) Descompacte esta pasta em um lugar fixo (ex.: C:\robo-zap).
+3) Dê dois cliques em INSTALAR.bat (só na primeira vez).
+4) No app do Caça Achados, vá em Ajustes > Robô do WhatsApp e toque em "Gerar chave do robô".
+   Copie a chave (ela só aparece uma vez).
+5) Faça uma cópia do arquivo config.exemplo.env com o nome config.env e preencha:
+   CHAVE= a chave que você copiou
+   DESTINOS= o link do seu grupo ou canal do WhatsApp
+   NOME_GRUPO= o nome dos seus grupos (ex.: Achados da Ana)
+6) Dê dois cliques em CONECTAR.bat. Abre um QR code.
+   No celular do número do robô: WhatsApp > Aparelhos conectados > Conectar um aparelho > ler o QR.
+   O número do robô precisa ser administrador do grupo ou do canal.
+7) Dê dois cliques em TESTE.bat: posta 1 oferta. Confira no WhatsApp.
+8) Se deu certo, INICIAR.bat deixa o robô ligado seguindo a agenda que você escolheu no app.
+
+O mesmo número não pode ficar conectado em dois computadores ao mesmo tempo.
+Não compartilhe o arquivo config.env: ele tem a sua chave do robô.
+Se você gerar uma chave nova no app, a antiga para de funcionar: troque no config.env.
