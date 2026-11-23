@@ -68,6 +68,21 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
   Falta: instalar, login (o dono digita), `TESTE-STORY.bat` para conferir a posição da figurinha, ligar.
 - Stories pela API oficial (`ig_ativo` + token da Meta) também existem, mas o token nunca foi conectado.
 
+## Marca e canais (O Cara dos Achados)
+- Nome sem mostrar o nome real do dono; identidade preto e amarelo (logo em `marcas/`).
+- Canais: grupos de WhatsApp "Cara dos Achados" (o robô cria o próximo grupo, numerado, perto de 950 pessoas;
+  no máximo 1 por dia), canal no Telegram t.me/ocaradosachados, Instagram @ocaradosachados01 (conta antiga
+  renomeada; o dono quer separá-la da antiga Mirafarma Drogaria num Meta Business só do O Cara dos Achados),
+  TikTok @ocaradosachados01 (só TikTok Shop). O canal de WhatsApp foi trocado por grupos comuns.
+- Anúncios Meta: o dono leva tráfego pago para o canal do Telegram.
+- Cupons: saem nos grupos como "bônus" (por ora só os da Shopee). Desconto mínimo das postagens zerado.
+- Afiliados só em programas gratuitos (não quer pagar para ser afiliado).
+- O dono usa o app no celular (iPhone), no iPad e no notebook.
+- TikTok Shop: API ainda não liberada (faltam seguidores); voltar quando liberar. Planos: lives como afiliado
+  e dois personagens de IA (Caio e Bia) para divulgar produtos (imagens/vídeos com Google Gemini/Veo).
+- **Estúdio IA** (aba do app): só para produzir os vídeos (Shopee Video etc.); não deve influenciar as
+  postagens dos grupos de WhatsApp. Ideia: achar produtos com boas vendas e poucos afiliados (< 300).
+
 ## Venda (Kiwify)
 - Assinatura mensal com opção anual; planos sugeridos: Caça Achados R$ 39,90/mês e + Robô WhatsApp R$ 59,90/mês.
 - `achados-kiwify` + `achados_assinatura_aplicar`: com acesso pago tudo liga; acabou o período → 7 dias de
