@@ -21,6 +21,20 @@ INSTALAR (uma vez, no DESKTOP, onde roda o robô do WhatsApp)
    figurinha ficou em cima do quadro amarelo.
 4. Dê dois cliques em INICIAR-STORIES-OCULTO.vbs para ligar (ou reinicie o computador).
 
+SEGUIR CONTAS (opcional, versão 2 do robô)
+- Segue de 20 a 30 contas por dia, uma de cada vez, espalhadas entre as horas marcadas.
+  Escolhe entre quem curtiu os posts recentes dos perfis de referência (públicos de achados).
+- Começa devagar: até 10 por dia nos 3 primeiros dias, até 20 até o 7º dia, depois a meta.
+- Nunca segue a mesma conta duas vezes (lista em seguir-estado.json). Não deixa de seguir ninguém.
+- Se o Instagram limitar, para de seguir por 2 dias e avisa no seu WhatsApp. Os Stories continuam.
+- Para ligar, acrescente no config.env (troque pelos perfis que você quer usar como referência):
+    SEGUIR_PERFIS=perfil1,perfil2,perfil3
+    SEGUIR_POR_DIA=25
+    SEGUIR_HORA_INI=9
+    SEGUIR_HORA_FIM=21
+  Depois rode SEGUIR-TESTE.bat (mostra quem seria seguido, sem seguir) e religue o robô
+  (PARAR-STORIES.bat e INICIAR-STORIES-OCULTO.vbs). Para desligar: apague a linha SEGUIR_PERFIS.
+
 NO DIA A DIA
 - VER-LOG-STORIES.bat: mostra o que o robô está fazendo.
 - PARAR-STORIES.bat: para só o robô de Stories.

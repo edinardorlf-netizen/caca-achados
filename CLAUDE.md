@@ -69,6 +69,12 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
 - Situação em 23/11: pacote pronto; o dono vai instalar no desktop em `C:\LicitaPro\robo-stories`.
   Falta: instalar, login (o dono digita), `TESTE-STORY.bat` para conferir a posição da figurinha, ligar.
 - Stories pela API oficial (`ig_ativo` + token da Meta) também existem, mas o token nunca foi conectado.
+- **v2: seguir contas** (pedido do dono em 23/11/2026, risco aceito): no laço principal, `seguir_um` segue 1 conta
+  quando chega a hora; meta `SEGUIR_POR_DIA` (máx. 30, rampa 10 → 20 → meta na 1ª semana), janela
+  `SEGUIR_HORA_INI`/`FIM`, mínimo ~6 min entre um e outro. Alvos: quem curtiu posts recentes de `SEGUIR_PERFIS`
+  (config.env local; vazio = desligado). Histórico em `seguir-estado.json` (nunca repete; não deixa de seguir).
+  Bloqueio → pausa de 48 h só no seguir + aviso. `SEGUIR-TESTE.bat` lista candidatos sem seguir.
+  O robô de Stories **não se atualiza sozinho**: trocar o `robo_stories.py` no desktop à mão.
 
 ## Telegram desligado (23/11/2026)
 - O dono decidiu **trabalhar só com o WhatsApp por enquanto**: `tg_ativo` = false (nada é postado no canal do
