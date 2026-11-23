@@ -63,6 +63,8 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
 - Usa a mesma chave do robô do WhatsApp. Agenda em `achados_config`: `ig_robo_ativo` (ligado), `ig_qtd` = 5,
   `ig_intervalo_min` = 120, `ig_hora_ini`/`ig_hora_fim` = 9–21, `ig_desconto_min` = 30, `ig_rodada_em`.
   Um Story a cada 4–9 min; figurinha em x 0,50 / y 0,80 (sobre o quadro "TOQUE NO LINK AQUI").
+  Cada rodada termina com um **6º Story-convite** para o grupo do WhatsApp (id `grupo`, link = `vit_whatsapp`,
+  arte `gerarArteGrupo` com o quadro no mesmo lugar). Publicado em 23/11/2026 (achados-story v9, com os avisos no WhatsApp).
 - Login caiu → avisa no WhatsApp particular e espera o `CONECTAR-INSTAGRAM.bat`; bloqueio → espera 6 h.
 - Situação em 23/11: pacote pronto; o dono vai instalar no desktop em `C:\LicitaPro\robo-stories`.
   Falta: instalar, login (o dono digita), `TESTE-STORY.bat` para conferir a posição da figurinha, ligar.
