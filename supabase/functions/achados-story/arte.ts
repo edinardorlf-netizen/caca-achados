@@ -69,7 +69,7 @@ export async function gerarArte(o: Oferta, foto: string | null, modo: Modo, r: R
         h("div", { fontSize: 58, fontWeight: 900, lineHeight: 1 }, "LINK NA BIO"),
         codigo ? h("div", { fontSize: 36, fontWeight: 700, marginTop: 12 }, `Procure o achado ${codigo} na vitrine`) : null,
       ),
-    h("div", { marginTop: 18, fontSize: 24, fontWeight: 500, color: "#8F897C" }, "Link de afiliado · preço e estoque podem mudar"),
+    h("div", { marginTop: 18, fontSize: 24, fontWeight: 500, color: "#8F897C" }, "Preço e estoque podem mudar"),
   );
 
   const svg = await satori(arvore as unknown as Parameters<typeof satori>[0], {
@@ -114,7 +114,7 @@ export async function gerarArteGrupo(r: Recursos, marca = ""): Promise<Uint8Arra
     ),
     h("div", { flexGrow: 1 }),
     h("div", { width: "100%", height: 170, border: `4px dashed ${AMARELO}`, borderRadius: 32, alignItems: "center", justifyContent: "center", fontSize: 40, fontWeight: 700, color: AMARELO }, "TOQUE NO LINK AQUI"),
-    h("div", { marginTop: 18, fontSize: 24, fontWeight: 500, color: "#8F897C" }, "Grupo de ofertas com links de afiliado"),
+    h("div", { marginTop: 18, fontSize: 24, fontWeight: 500, color: "#8F897C" }, "Preço e estoque das ofertas podem mudar"),
   );
   const svg = await satori(arvore as unknown as Parameters<typeof satori>[0], {
     width: 1080, height: 1920,

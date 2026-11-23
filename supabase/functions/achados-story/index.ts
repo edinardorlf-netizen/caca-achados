@@ -64,7 +64,7 @@ async function curto(txt: string) {
 async function artes(o: Oferta, quais: Modo[] = ["bio", "link"]) {
   const { data: dc } = await db.from("achados_config").select("assinatura").eq("dono", o.dono).maybeSingle();
   const marca = dc?.assinatura || "";
-  const versao = await curto(`${o.titulo}|${o.preco_de}|${o.preco_por}|${o.cupom || ""}|${o.imagem || ""}|${marca}|v1`);
+  const versao = await curto(`${o.titulo}|${o.preco_de}|${o.preco_por}|${o.cupom || ""}|${o.imagem || ""}|${marca}|v2`);
   const caminho = (m: Modo) => `o${o.num}-${m}-${versao}.jpg`;
   const pub = (m: Modo) => db.storage.from("stories").getPublicUrl(caminho(m)).data.publicUrl;
   const atual: Record<Modo, string | null> = { bio: o.story_bio_url, link: o.story_link_url };
@@ -337,7 +337,7 @@ async function listaParaStory(dono: string, minDesc: number, qtd: number) {
 // Story-convite do grupo do WhatsApp: a arte é gerada uma vez e reaproveitada (o nome muda se mudar a marca).
 async function storyGrupo(dono: string, link: string | null, marca: string | null) {
   if (!link || !/^https:\/\//i.test(link)) return null;
-  const caminho = `grupo-${await curto(dono)}-${await curto(`${marca || ""}|g1`)}.jpg`;
+  const caminho = `grupo-${await curto(dono)}-${await curto(`${marca || ""}|g2`)}.jpg`;
   const url = db.storage.from("stories").getPublicUrl(caminho).data.publicUrl;
   const existe = await fetch(url, { method: "HEAD" }).then((r) => r.ok).catch(() => false);
   if (!existe) {
