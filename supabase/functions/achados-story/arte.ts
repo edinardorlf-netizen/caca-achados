@@ -86,6 +86,50 @@ export async function gerarArte(o: Oferta, foto: string | null, modo: Modo, r: R
   return new Uint8Array(out.data);
 }
 
+// Arte do Story-convite para o grupo do WhatsApp (último Story da rodada do robô).
+// O quadro "TOQUE NO LINK AQUI" fica no MESMO lugar da arte das ofertas, para a figurinha cair em cima dele.
+export async function gerarArteGrupo(r: Recursos, marca = ""): Promise<Uint8Array> {
+  if (!wasmPronto) { await initWasm(r.wasm); wasmPronto = true; }
+  const VERDE = "#25D366";
+  const item = (t: string) => h("div", { width: "100%", alignItems: "center", marginTop: 26 },
+    h("div", { width: 30, height: 30, borderRadius: 999, background: AMARELO, marginRight: 30, flexShrink: 0 }),
+    h("div", { fontSize: 46, fontWeight: 700, lineHeight: 1.15, flexShrink: 1 }, t),
+  );
+  const arvore = h("div", { width: 1080, height: 1920, background: PRETO, flexDirection: "column", alignItems: "center", fontFamily: "Archivo", color: "#fff", padding: "250px 72px 250px" },
+    h("div", { width: "100%", justifyContent: "space-between", alignItems: "center" },
+      h("div", { flexDirection: "column" },
+        marca.trim() ? h("div", { fontSize: 30, fontWeight: 900, color: AMARELO, letterSpacing: 2 }, marca.trim().toUpperCase().slice(0, 40)) : null,
+        h("div", { fontSize: 56, fontWeight: 900, lineHeight: 1, marginTop: 6 }, "GRUPO DE ACHADOS"),
+      ),
+      h("div", { background: VERDE, color: "#fff", fontSize: 30, fontWeight: 700, padding: "14px 26px", borderRadius: 999 }, "WhatsApp"),
+    ),
+    h("div", { width: 936, marginTop: 60, background: AMARELO, color: PRETO, borderRadius: 40, padding: "56px 56px", flexDirection: "column" },
+      h("div", { fontSize: 92, fontWeight: 900, lineHeight: 1.02 }, "Quer receber os achados no WhatsApp?"),
+      h("div", { fontSize: 44, fontWeight: 700, marginTop: 26, lineHeight: 1.2 }, "Entra no grupo: é de graça."),
+    ),
+    h("div", { width: "100%", flexDirection: "column", marginTop: 40 },
+      item("Ofertas com desconto todos os dias"),
+      item("Link direto para a loja"),
+      item("Sai quando quiser"),
+    ),
+    h("div", { flexGrow: 1 }),
+    h("div", { width: "100%", height: 170, border: `4px dashed ${AMARELO}`, borderRadius: 32, alignItems: "center", justifyContent: "center", fontSize: 40, fontWeight: 700, color: AMARELO }, "TOQUE NO LINK AQUI"),
+    h("div", { marginTop: 18, fontSize: 24, fontWeight: 500, color: "#8F897C" }, "Grupo de ofertas com links de afiliado"),
+  );
+  const svg = await satori(arvore as unknown as Parameters<typeof satori>[0], {
+    width: 1080, height: 1920,
+    fonts: [
+      { name: "Archivo", data: r.fontes.w500, weight: 500, style: "normal" },
+      { name: "Archivo", data: r.fontes.w700, weight: 700, style: "normal" },
+      { name: "Archivo", data: r.fontes.w900, weight: 900, style: "normal" },
+    ],
+  });
+  const px = new Resvg(svg, { fitTo: { mode: "width", value: 1080 } }).render();
+  const out = jpeg.encode({ data: px.pixels, width: px.width, height: px.height }, 88);
+  px.free?.();
+  return new Uint8Array(out.data);
+}
+
 // Baixa a foto do produto e devolve como data URI (o satori não lê WebP: pedimos JPG às lojas).
 export async function fotoDataUri(url: string | null | undefined): Promise<string | null> {
   if (!url || !/^https:\/\//i.test(url)) return null;

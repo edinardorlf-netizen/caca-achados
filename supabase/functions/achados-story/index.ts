@@ -16,7 +16,7 @@
 // (a bio aponta para a Vitrine, onde o achado aparece pelo código #N).
 // =====================================================================
 import { createClient } from "npm:@supabase/supabase-js@2.49.4";
-import { fotoDataUri, gerarArte, type Modo, type Recursos } from "./arte.ts";
+import { fotoDataUri, gerarArte, gerarArteGrupo, type Modo, type Recursos } from "./arte.ts";
 
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -316,6 +316,7 @@ async function whatsappAgendado() {
 // ---------- Robô de Stories (programa no computador do dono, com a figurinha de link) ----------
 // O robô usa a mesma chave do robô do WhatsApp (cabeçalho x-zap-key; o banco guarda só o hash).
 //   { acao: "story_proximas" }          → rodada da vez: até ig_qtd ofertas com a arte "TOQUE NO LINK AQUI"
+//                                          + 1 Story-convite no fim (id "grupo"), com o link do grupo do WhatsApp (vit_whatsapp)
 //   { acao: "story_teste" }             → 1 oferta agora, sem mexer na agenda
 //   { acao: "story_confirmar", id, erro? } → marca o Story como postado (ou guarda o erro)
 //   { acao: "story_aviso", mensagem }   → avisa o dono no Telegram (ex.: o Instagram pediu login de novo)
@@ -332,10 +333,24 @@ async function listaParaStory(dono: string, minDesc: number, qtd: number) {
   lst.sort((a: Oferta, b: Oferta) => (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
   return lst.slice(0, qtd);
 }
+// Story-convite do grupo do WhatsApp: a arte é gerada uma vez e reaproveitada (o nome muda se mudar a marca).
+async function storyGrupo(dono: string, link: string | null, marca: string | null) {
+  if (!link || !/^https:\/\//i.test(link)) return null;
+  const caminho = `grupo-${await curto(dono)}-${await curto(`${marca || ""}|g1`)}.jpg`;
+  const url = db.storage.from("stories").getPublicUrl(caminho).data.publicUrl;
+  const existe = await fetch(url, { method: "HEAD" }).then((r) => r.ok).catch(() => false);
+  if (!existe) {
+    const jpg = await gerarArteGrupo(await carregarRecursos(), marca || "");
+    const { error } = await db.storage.from("stories").upload(caminho, jpg, { contentType: "image/jpeg", upsert: true, cacheControl: "31536000" });
+    if (error) throw new Error(`Erro ao guardar a arte do grupo: ${error.message}`);
+  }
+  return { id: "grupo", num: null, titulo: "Convite para o grupo do WhatsApp", link, arte: url };
+}
+
 async function roboStory(chave: string, body: Oferta) {
   if (chave.length < 16) return json({ erro: "não autorizado" }, 401);
   const { data: c } = await db.from("achados_config")
-    .select("dono,rec_robo,ig_robo_ativo,ig_qtd,ig_intervalo_min,ig_hora_ini,ig_hora_fim,ig_desconto_min,ig_rodada_em,alerta_chat_id,zap_aviso_numero")
+    .select("dono,rec_robo,ig_robo_ativo,ig_qtd,ig_intervalo_min,ig_hora_ini,ig_hora_fim,ig_desconto_min,ig_rodada_em,alerta_chat_id,zap_aviso_numero,vit_whatsapp,assinatura")
     .eq("zap_chave_hash", await sha256hex(chave)).maybeSingle();
   if (!c) return json({ erro: "Chave do robô inválida (use a mesma do robô do WhatsApp)." }, 401);
   if (!c.rec_robo) return json({ erro: "O robô não está ativo nesta conta." }, 403);
@@ -348,7 +363,10 @@ async function roboStory(chave: string, body: Oferta) {
     return out;
   };
 
-  if (body.acao === "story_teste") return json({ ofertas: await saida(await listaParaStory(c.dono, 0, 1)), motivo: "teste" });
+  if (body.acao === "story_teste") {
+    if (body.grupo) { const g = await storyGrupo(c.dono, c.vit_whatsapp, c.assinatura); return json({ ofertas: g ? [g] : [], motivo: g ? "teste" : "sem link do grupo" }); }
+    return json({ ofertas: await saida(await listaParaStory(c.dono, 0, 1)), motivo: "teste" });
+  }
   if (body.acao === "story_proximas") {
     if (!c.ig_robo_ativo) return json({ ofertas: [], motivo: "desligado" });
     if (!noHorario(horaSP(), c.ig_hora_ini, c.ig_hora_fim)) return json({ ofertas: [], motivo: "fora do horário" });
@@ -357,10 +375,18 @@ async function roboStory(chave: string, body: Oferta) {
     const lst = await listaParaStory(c.dono, Number(c.ig_desconto_min) || 0, Math.max(1, Math.min(10, Number(c.ig_qtd) || 5)));
     if (!lst.length) { await db.from("achados_config").update({ ig_msg: "Robô de Stories: nenhuma oferta nova com link e desconto suficiente." }).eq("dono", c.dono); return json({ ofertas: [], motivo: "sem ofertas" }); }
     await db.from("achados_config").update({ ig_rodada_em: new Date().toISOString() }).eq("dono", c.dono);
-    return json({ ofertas: await saida(lst), motivo: "ok" });
+    const ofertas: Oferta[] = await saida(lst);
+    // Último Story da rodada: convite para o grupo do WhatsApp (se o link do grupo estiver em Ajustes > Vitrine)
+    try { const g = await storyGrupo(c.dono, c.vit_whatsapp, c.assinatura); if (g && ofertas.length) ofertas.push(g); }
+    catch (e) { await db.from("achados_config").update({ ig_msg: `Story do grupo falhou: ${(e as Error).message}`.slice(0, 300) }).eq("dono", c.dono); }
+    return json({ ofertas, motivo: "ok" });
   }
   if (body.acao === "story_confirmar") {
     const id = String(body.id || "");
+    if (id === "grupo" && !body.erro) {
+      await db.from("achados_config").update({ ig_ultimo_post: new Date().toISOString(), ig_msg: "Story do grupo do WhatsApp publicado pelo robô." }).eq("dono", c.dono);
+      return json({ ok: true });
+    }
     if (body.erro) { await db.from("achados_config").update({ ig_msg: `Robô de Stories: ${String(body.erro)}`.slice(0, 300) }).eq("dono", c.dono); return json({ ok: true }); }
     const { data: o } = await db.from("achados_ofertas").select("id,num,titulo,canais").eq("dono", c.dono).eq("id", id).maybeSingle();
     if (!o) return json({ erro: "Oferta não encontrada." }, 404);
