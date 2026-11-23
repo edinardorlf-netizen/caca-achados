@@ -17,12 +17,18 @@
 #   python robo_stories.py            → fica ligado seguindo a agenda do app (Ajustes > Instagram)
 #   python robo_stories.py seguir-teste → mostra quem o robô seguiria (não segue ninguém)
 #
-# SEGUIR CONTAS (opcional; desligado se SEGUIR_PERFIS estiver vazio no config.env):
+# ATUALIZAÇÃO SOZINHA (v3): a cada 30 min, entre as rodadas, pergunta ao servidor se há versão nova
+#   (tabela story_codigo). Se houver, confere o sha256, troca o robo_stories.py e reinicia (o INICIAR-STORIES.bat
+#   religa em 30 s). A configuração de "seguir contas" também vem do servidor (achados_config.ig_seguir_*).
+#
+# SEGUIR CONTAS (opcional; desligado se não houver perfis de referência no servidor nem no config.env):
 #   segue no máximo 30 contas por dia, uma de cada vez, espalhadas pelas horas marcadas, escolhidas entre
 #   quem curtiu os posts recentes dos perfis de referência. Começa devagar (ver META_RAMPA).
 #   Nunca segue a mesma conta duas vezes. Se o Instagram reclamar, para de seguir por 2 dias e avisa.
 # =====================================================================
 import getpass
+import hashlib
+import os
 import json
 import logging
 import random
@@ -42,7 +48,7 @@ from instagrapi.exceptions import (
 )
 from instagrapi.types import StoryLink
 
-VERSAO = 2
+VERSAO = 3
 AQUI = Path(__file__).resolve().parent
 SESSAO = AQUI / "sessao-instagram.json"
 URL_PADRAO = "https://airbtbqorhrrzqhucmzu.supabase.co/functions/v1/achados-story"
@@ -60,6 +66,11 @@ ESTADO_SEGUIR = AQUI / "seguir-estado.json"
 SEGUIR_MAX = 30
 META_RAMPA = [(3, 10), (7, 20)]  # nos 3 primeiros dias até 10/dia; até o 7º dia até 20/dia; depois a meta
 PAUSA_SEGUIR_BLOQUEIO = 48 * 3600
+
+# Atualização sozinha e configuração vinda do servidor
+INTERVALO_SINC = 30 * 60
+ARQUIVOS_ATUALIZAVEIS = {"robo_stories.py"}
+SERVIDOR_SEGUIR = None  # preenchido por sincronizar(); se None, usa o config.env
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s", datefmt="%d/%m %H:%M:%S")
 log = logging.info
@@ -213,12 +224,51 @@ def rodada(cl, ofertas):
 
 
 
+# ---------- atualização sozinha + configuração do servidor ----------
+def aplicar_atualizacao(at):
+    """Confere e grava os arquivos novos; depois encerra para o INICIAR-STORIES.bat religar com o código novo."""
+    nova = int(at.get("versao") or 0)
+    gravados = 0
+    for a in at.get("arquivos") or []:
+        nome = str(a.get("nome", ""))
+        if nome not in ARQUIVOS_ATUALIZAVEIS:
+            log(f"Atualização: ignorei o arquivo {nome!r} (não permitido).")
+            continue
+        dados = str(a.get("conteudo", "")).encode("utf-8")
+        if hashlib.sha256(dados).hexdigest() != str(a.get("sha256", "")).lower():
+            raise RuntimeError(f"atualização {nova}: o sha256 de {nome} não confere; não troquei nada.")
+        compile(dados.decode("utf-8"), nome, "exec")  # não troca por um arquivo quebrado
+        novo = AQUI / (nome + ".novo")
+        novo.write_bytes(dados)
+        os.replace(novo, AQUI / nome)
+        gravados += 1
+    if gravados:
+        avisar(f"atualizei para a versão {nova}. Reiniciando.")
+        sys.exit(0)
+
+
+def sincronizar():
+    global SERVIDOR_SEGUIR
+    r = api({"acao": "story_config", "versao": VERSAO})
+    if isinstance(r.get("seguir"), dict):
+        SERVIDOR_SEGUIR = r["seguir"]
+    if r.get("atualizacao"):
+        aplicar_atualizacao(r["atualizacao"])
+
+
 # ---------- seguir contas (poucas por dia, espalhadas) ----------
 def _hoje():
     return time.strftime("%Y-%m-%d")
 
 
 def cfg_seguir():
+    if SERVIDOR_SEGUIR is not None:  # configuração feita no servidor vale mais que o config.env
+        s = SERVIDOR_SEGUIR
+        try:
+            return ([str(x).lstrip("@").lower() for x in s.get("perfis") or []],
+                    max(0, min(SEGUIR_MAX, int(s.get("por_dia", 0)))), int(s.get("hora_ini", 9)), int(s.get("hora_fim", 21)))
+        except (TypeError, ValueError):
+            pass
     perfis = [p.strip().lstrip("@").lower() for p in CFG.get("SEGUIR_PERFIS", "").split(",") if p.strip()]
     try:
         meta = int(CFG.get("SEGUIR_POR_DIA", "25"))
@@ -343,9 +393,15 @@ def seguir_um(cl):
 
 
 def seguir_teste():
+    try:
+        sincronizar()
+    except SystemExit:
+        raise
+    except Exception as ex:  # noqa: BLE001
+        log(f"(não consegui ler a configuração do servidor: {ex}; usando o config.env)")
     perfis, meta, ini, fim = cfg_seguir()
     if not perfis:
-        sys.exit("Coloque os perfis de referência em SEGUIR_PERFIS no config.env (ex.: SEGUIR_PERFIS=perfil1,perfil2).")
+        sys.exit("Nenhum perfil de referência (nem no servidor, nem em SEGUIR_PERFIS no config.env).")
     cl = carregar()
     if not cl:
         sys.exit("Instagram não conectado. Abra CONECTAR-INSTAGRAM.bat primeiro.")
@@ -376,7 +432,16 @@ def ligado(teste=False):
         log("Teste feito. Confira o Story no Instagram (a figurinha deve ficar em cima do quadro amarelo).")
         return
     ultimo_motivo = None
+    ultimo_sinc = 0.0
     while True:
+        if time.time() - ultimo_sinc > INTERVALO_SINC:
+            ultimo_sinc = time.time()
+            try:
+                sincronizar()
+            except SystemExit:
+                raise
+            except Exception as e:  # noqa: BLE001
+                log(f"Sincronizar: {e}")
         try:
             r = api({"acao": "story_proximas"})
             ofertas = r.get("ofertas") or []

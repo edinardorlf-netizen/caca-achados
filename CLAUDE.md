@@ -74,7 +74,12 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
   `SEGUIR_HORA_INI`/`FIM`, mínimo ~6 min entre um e outro. Alvos: quem curtiu posts recentes de `SEGUIR_PERFIS`
   (config.env local; vazio = desligado). Histórico em `seguir-estado.json` (nunca repete; não deixa de seguir).
   Bloqueio → pausa de 48 h só no seguir + aviso. `SEGUIR-TESTE.bat` lista candidatos sem seguir.
-  O robô de Stories **não se atualiza sozinho**: trocar o `robo_stories.py` no desktop à mão.
+- **v3: atualiza sozinho** como o do WhatsApp: a cada 30 min a ação `story_config` (achados-story) devolve a
+  configuração de seguir (`achados_config.ig_seguir_perfis` texto separado por vírgula, `ig_seguir_qtd` 0–30,
+  `ig_seguir_hora_ini`/`fim`; vale mais que o config.env) e, se `story_codigo` tiver versão maior, os arquivos
+  [{nome, conteudo, sha256}] (só `robo_stories.py`; confere sha256 e compila antes de trocar; depois sai e o .bat
+  religa). Para publicar: insira a versão nova em `story_codigo` com o sha256 do conteúdo UTF-8.
+  A v3 em si precisa ser copiada à mão uma vez no desktop.
 
 ## Telegram desligado (23/11/2026)
 - O dono decidiu **trabalhar só com o WhatsApp por enquanto**: `tg_ativo` = false (nada é postado no canal do

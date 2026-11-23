@@ -317,6 +317,7 @@ async function whatsappAgendado() {
 // O robô usa a mesma chave do robô do WhatsApp (cabeçalho x-zap-key; o banco guarda só o hash).
 //   { acao: "story_proximas" }          → rodada da vez: até ig_qtd ofertas com a arte "TOQUE NO LINK AQUI"
 //                                          + 1 Story-convite no fim (id "grupo"), com o link do grupo do WhatsApp (vit_whatsapp)
+//   { acao: "story_config", versao }    → configuração de "seguir contas" + código novo do robô (story_codigo), se houver
 //   { acao: "story_teste" }             → 1 oferta agora, sem mexer na agenda
 //   { acao: "story_confirmar", id, erro? } → marca o Story como postado (ou guarda o erro)
 //   { acao: "story_aviso", mensagem }   → avisa o dono no Telegram (ex.: o Instagram pediu login de novo)
@@ -350,7 +351,7 @@ async function storyGrupo(dono: string, link: string | null, marca: string | nul
 async function roboStory(chave: string, body: Oferta) {
   if (chave.length < 16) return json({ erro: "não autorizado" }, 401);
   const { data: c } = await db.from("achados_config")
-    .select("dono,rec_robo,ig_robo_ativo,ig_qtd,ig_intervalo_min,ig_hora_ini,ig_hora_fim,ig_desconto_min,ig_rodada_em,alerta_chat_id,zap_aviso_numero,vit_whatsapp,assinatura")
+    .select("dono,rec_robo,ig_robo_ativo,ig_qtd,ig_intervalo_min,ig_hora_ini,ig_hora_fim,ig_desconto_min,ig_rodada_em,alerta_chat_id,zap_aviso_numero,vit_whatsapp,assinatura,ig_seguir_perfis,ig_seguir_qtd,ig_seguir_hora_ini,ig_seguir_hora_fim")
     .eq("zap_chave_hash", await sha256hex(chave)).maybeSingle();
   if (!c) return json({ erro: "Chave do robô inválida (use a mesma do robô do WhatsApp)." }, 401);
   if (!c.rec_robo) return json({ erro: "O robô não está ativo nesta conta." }, 403);
@@ -363,6 +364,19 @@ async function roboStory(chave: string, body: Oferta) {
     return out;
   };
 
+  if (body.acao === "story_config") {
+    // O robô pergunta (a cada 30 min) a configuração de "seguir contas" e se há código novo.
+    // Só devolve os arquivos quando a versão do servidor é maior que a dele (igual ao robô do WhatsApp).
+    const seguir = {
+      perfis: String(c.ig_seguir_perfis || "").split(",").map((p) => p.trim().replace(/^@/, "").toLowerCase()).filter(Boolean),
+      por_dia: Math.max(0, Math.min(30, Number(c.ig_seguir_qtd) || 0)),
+      hora_ini: Number(c.ig_seguir_hora_ini ?? 9), hora_fim: Number(c.ig_seguir_hora_fim ?? 21),
+    };
+    const { data: v } = await db.from("story_codigo").select("versao,arquivos").order("versao", { ascending: false }).limit(1).maybeSingle();
+    const minha = Number(body.versao) || 0;
+    const atualizacao = v && v.versao > minha ? { versao: v.versao, arquivos: v.arquivos } : null;
+    return json({ seguir, versao: v?.versao ?? minha, atualizacao });
+  }
   if (body.acao === "story_teste") {
     if (body.grupo) { const g = await storyGrupo(c.dono, c.vit_whatsapp, c.assinatura); return json({ ofertas: g ? [g] : [], motivo: g ? "teste" : "sem link do grupo" }); }
     return json({ ofertas: await saida(await listaParaStory(c.dono, 0, 1)), motivo: "teste" });
