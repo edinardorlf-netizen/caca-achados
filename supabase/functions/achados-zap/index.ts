@@ -250,8 +250,13 @@ Deno.serve(async (req) => {
       // O link de entrada (rodapé das mensagens e Vitrine) passa a ser o do grupo mais novo.
       await db.from("achados_config").update({ vit_whatsapp: link, wa_msg: `Novo grupo criado: ${String(body.nome || "").slice(0, 60)}` }).eq("dono", c.dono);
       try {
+        const { data: al } = await db.from("achados_config").select("alerta_chat_id,zap_aviso_numero").eq("dono", c.dono).maybeSingle();
+        // Aviso no WhatsApp particular do dono; sem número cadastrado, vai pelo Telegram.
+        if (al?.zap_aviso_numero) {
+          await db.from("achados_zap_privadas").insert({ dono: c.dono, numero: al.zap_aviso_numero, texto: `🆕 O robô criou o grupo "${body.nome}" (o anterior encheu).\nNovo link de entrada: ${link}` });
+          return json({ ok: true });
+        }
         const { data: tok } = await db.rpc("achados_tg_token", { p_dono: c.dono });
-        const { data: al } = await db.from("achados_config").select("alerta_chat_id").eq("dono", c.dono).maybeSingle();
         if (tok && al?.alerta_chat_id) await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: al.alerta_chat_id, text: `🆕 O robô criou o grupo "${body.nome}" do WhatsApp (o anterior encheu).\nNovo link de entrada: ${link}` }) });
       } catch (_) { /* o aviso é só um extra */ }
       return json({ ok: true });

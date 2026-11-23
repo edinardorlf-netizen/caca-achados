@@ -63,10 +63,20 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
 - Usa a mesma chave do robô do WhatsApp. Agenda em `achados_config`: `ig_robo_ativo` (ligado), `ig_qtd` = 5,
   `ig_intervalo_min` = 120, `ig_hora_ini`/`ig_hora_fim` = 9–21, `ig_desconto_min` = 30, `ig_rodada_em`.
   Um Story a cada 4–9 min; figurinha em x 0,50 / y 0,80 (sobre o quadro "TOQUE NO LINK AQUI").
-- Login caiu → avisa no Telegram e espera o `CONECTAR-INSTAGRAM.bat`; bloqueio → espera 6 h.
+- Login caiu → avisa no WhatsApp particular e espera o `CONECTAR-INSTAGRAM.bat`; bloqueio → espera 6 h.
 - Situação em 23/11: pacote pronto; o dono vai instalar no desktop em `C:\LicitaPro\robo-stories`.
   Falta: instalar, login (o dono digita), `TESTE-STORY.bat` para conferir a posição da figurinha, ligar.
 - Stories pela API oficial (`ig_ativo` + token da Meta) também existem, mas o token nunca foi conectado.
+
+## Telegram desligado (23/11/2026)
+- O dono decidiu **trabalhar só com o WhatsApp por enquanto**: `tg_ativo` = false (nada é postado no canal do
+  Telegram), `alerta_ativo` = false (o aviso de achadão para Story à mão saiu; o robô de Stories faz isso) e
+  `vit_telegram` = null (o link do Telegram saiu do rodapé das mensagens; era https://t.me/ocaradosachados).
+- Avisos dos robôs (grupo novo criado, robô de Stories) vão para o **WhatsApp particular** do dono pela tabela
+  `achados_zap_privadas`, usando `achados_config.zap_aviso_numero` (553897412120). Sem número, caem no Telegram.
+- Única exceção: a vigia "o robô do WhatsApp parou" continua no bot particular do Telegram, porque com o robô
+  parado não há como mandar no WhatsApp.
+- Para voltar ao Telegram: religar `tg_ativo`, devolver `vit_telegram` e (se quiser) `alerta_ativo`.
 
 ## Marca e canais (O Cara dos Achados)
 - Nome sem mostrar o nome real do dono; identidade preto e amarelo (logo em `marcas/`).
@@ -74,7 +84,7 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
   no máximo 1 por dia), canal no Telegram t.me/ocaradosachados, Instagram @ocaradosachados01 (conta antiga
   renomeada; o dono quer separá-la da antiga Mirafarma Drogaria num Meta Business só do O Cara dos Achados),
   TikTok @ocaradosachados01 (só TikTok Shop). O canal de WhatsApp foi trocado por grupos comuns.
-- Anúncios Meta: o dono leva tráfego pago para o canal do Telegram.
+- Anúncios Meta: levavam tráfego para o canal do Telegram; com o Telegram parado, devem apontar para o grupo de WhatsApp.
 - Cupons: saem nos grupos como "bônus" (por ora só os da Shopee). Desconto mínimo das postagens zerado.
 - Afiliados só em programas gratuitos (não quer pagar para ser afiliado).
 - O dono usa o app no celular (iPhone), no iPad e no notebook.

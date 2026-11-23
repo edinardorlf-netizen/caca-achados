@@ -24,7 +24,7 @@ INSTALAR (uma vez, no DESKTOP, onde roda o robô do WhatsApp)
 NO DIA A DIA
 - VER-LOG-STORIES.bat: mostra o que o robô está fazendo.
 - PARAR-STORIES.bat: para só o robô de Stories.
-- Se o Instagram pedir login de novo, chega um aviso no Telegram. Abra CONECTAR-INSTAGRAM.bat,
+- Se o Instagram pedir login de novo, chega um aviso no seu WhatsApp. Abra CONECTAR-INSTAGRAM.bat,
   entre de novo, e o robô volta sozinho.
 - Se o Instagram bloquear as postagens, o robô avisa e espera 6 horas antes de tentar de novo.
 - Agenda (de quanto em quanto tempo, horário, desconto mínimo): no app, Ajustes > Instagram.

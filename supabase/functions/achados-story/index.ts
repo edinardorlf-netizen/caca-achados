@@ -335,7 +335,7 @@ async function listaParaStory(dono: string, minDesc: number, qtd: number) {
 async function roboStory(chave: string, body: Oferta) {
   if (chave.length < 16) return json({ erro: "não autorizado" }, 401);
   const { data: c } = await db.from("achados_config")
-    .select("dono,rec_robo,ig_robo_ativo,ig_qtd,ig_intervalo_min,ig_hora_ini,ig_hora_fim,ig_desconto_min,ig_rodada_em,alerta_chat_id")
+    .select("dono,rec_robo,ig_robo_ativo,ig_qtd,ig_intervalo_min,ig_hora_ini,ig_hora_fim,ig_desconto_min,ig_rodada_em,alerta_chat_id,zap_aviso_numero")
     .eq("zap_chave_hash", await sha256hex(chave)).maybeSingle();
   if (!c) return json({ erro: "Chave do robô inválida (use a mesma do robô do WhatsApp)." }, 401);
   if (!c.rec_robo) return json({ erro: "O robô não está ativo nesta conta." }, 403);
@@ -372,7 +372,11 @@ async function roboStory(chave: string, body: Oferta) {
   if (body.acao === "story_aviso") {
     const msg = String(body.mensagem || "").slice(0, 600);
     await db.from("achados_config").update({ ig_msg: `Robô de Stories: ${msg}`.slice(0, 300) }).eq("dono", c.dono);
-    try { if (c.alerta_chat_id) await tg(await tgToken(c.dono), "sendMessage", { chat_id: c.alerta_chat_id, text: `📸 Robô de Stories: ${msg}` }); } catch (_) { /* aviso é extra */ }
+    // Aviso no WhatsApp particular do dono (pelo robô do WhatsApp); sem número, vai pelo Telegram.
+    try {
+      if (c.zap_aviso_numero) await db.from("achados_zap_privadas").insert({ dono: c.dono, numero: c.zap_aviso_numero, texto: `📸 *Robô de Stories*\n${msg}` });
+      else if (c.alerta_chat_id) await tg(await tgToken(c.dono), "sendMessage", { chat_id: c.alerta_chat_id, text: `📸 Robô de Stories: ${msg}` });
+    } catch (_) { /* aviso é extra */ }
     return json({ ok: true });
   }
   return json({ erro: "Ação desconhecida." }, 400);
