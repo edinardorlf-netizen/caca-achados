@@ -56,8 +56,8 @@ if errorlevel 1 (
 echo Chave copiada.
 
 rem 4) Ligar sozinho quando o Windows abrir
-powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Startup')+'\Robo de Stories.lnk'); $s.TargetPath='%~dp0INICIAR-STORIES-OCULTO.vbs'; $s.WorkingDirectory='%~dp0'; $s.Save()"
-echo Atalho criado na pasta Inicializar do Windows.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0AGENDAR-STORIES.ps1"
+echo Robo agendado: liga sozinho, sem janela, ao entrar no Windows e as 05:55.
 
 rem 5) Conectar o Instagram
 echo.
