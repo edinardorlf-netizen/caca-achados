@@ -60,13 +60,26 @@ async function curto(txt: string) {
   return [...new Uint8Array(h)].slice(0, 5).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// Gera (ou reaproveita) as artes de uma oferta. O nome do arquivo muda quando muda o preço ou o título.
-async function artes(o: Oferta, quais: Modo[] = ["bio", "link"]) {
-  const { data: dc } = await db.from("achados_config").select("assinatura").eq("dono", o.dono).maybeSingle();
-  const marca = dc?.assinatura || "";
+// Endereço da arte de uma oferta. O nome do arquivo muda quando muda o preço, o título ou o modelo da arte.
+async function enderecoArte(o: Oferta, marca: string) {
   const versao = await curto(`${o.titulo}|${o.preco_de}|${o.preco_por}|${o.cupom || ""}|${o.imagem || ""}|${marca}|v2`);
   const caminho = (m: Modo) => `o${o.num}-${m}-${versao}.jpg`;
   const pub = (m: Modo) => db.storage.from("stories").getPublicUrl(caminho(m)).data.publicUrl;
+  return { caminho, pub };
+}
+async function marcaDe(dono: string) {
+  const { data: dc } = await db.from("achados_config").select("assinatura").eq("dono", dono).maybeSingle();
+  return dc?.assinatura || "";
+}
+// A arte "link" desta oferta já está pronta? (desenhar gasta CPU: o limite da função é ~2 s por chamada)
+async function artePronta(o: Oferta, marca: string) {
+  return o.story_link_url === (await enderecoArte(o, marca)).pub("link");
+}
+
+// Gera (ou reaproveita) as artes de uma oferta.
+async function artes(o: Oferta, quais: Modo[] = ["bio", "link"]) {
+  const marca = await marcaDe(o.dono);
+  const { caminho, pub } = await enderecoArte(o, marca);
   const atual: Record<Modo, string | null> = { bio: o.story_bio_url, link: o.story_link_url };
   const faltam = quais.filter((m) => atual[m] !== pub(m));
   if (faltam.length) {
@@ -335,17 +348,50 @@ async function listaParaStory(dono: string, minDesc: number, qtd: number) {
   return lst.slice(0, qtd);
 }
 // Story-convite do grupo do WhatsApp: a arte é gerada uma vez e reaproveitada (o nome muda se mudar a marca).
-async function storyGrupo(dono: string, link: string | null, marca: string | null) {
+// podeDesenhar=false: se a arte ainda não existir, devolve null em vez de desenhar (para não estourar a CPU).
+async function storyGrupo(dono: string, link: string | null, marca: string | null, podeDesenhar = true) {
   if (!link || !/^https:\/\//i.test(link)) return null;
   const caminho = `grupo-${await curto(dono)}-${await curto(`${marca || ""}|g2`)}.jpg`;
   const url = db.storage.from("stories").getPublicUrl(caminho).data.publicUrl;
   const existe = await fetch(url, { method: "HEAD" }).then((r) => r.ok).catch(() => false);
   if (!existe) {
+    if (!podeDesenhar) return null;
     const jpg = await gerarArteGrupo(await carregarRecursos(), marca || "");
     const { error } = await db.storage.from("stories").upload(caminho, jpg, { contentType: "image/jpeg", upsert: true, cacheControl: "31536000" });
     if (error) throw new Error(`Erro ao guardar a arte do grupo: ${error.message}`);
   }
   return { id: "grupo", num: null, titulo: "Convite para o grupo do WhatsApp", link, arte: url };
+}
+
+// Limite de artes desenhadas por chamada: cada uma gasta CPU e a função tem ~2 s de CPU por chamada.
+const LIMITE_ARTES = 2;
+
+// Cron (a cada 10 min): deixa prontas as artes da próxima rodada do robô, poucas por vez,
+// para a rodada só pegar arte pronta (antes, desenhar tudo de uma vez estourava o limite de CPU).
+async function prepararArtes() {
+  const { data: donos } = await db.from("achados_config").select("dono,ig_qtd,ig_desconto_min,vit_whatsapp,assinatura").eq("ig_robo_ativo", true).eq("rec_robo", true);
+  const res: Record<string, unknown> = {};
+  let feitas = 0;
+  for (const c of donos || []) {
+    if (feitas >= LIMITE_ARTES) { res[c.dono] = "fica para o próximo ciclo"; continue; }
+    try {
+      const marca = c.assinatura || "";
+      let aqui = 0;
+      if (/^https:\/\//i.test(c.vit_whatsapp || "") && !(await storyGrupo(c.dono, c.vit_whatsapp, marca, false))) {
+        await storyGrupo(c.dono, c.vit_whatsapp, marca); feitas++; aqui++;
+      }
+      const lst = await listaParaStory(c.dono, Number(c.ig_desconto_min) || 0, Math.max(1, Math.min(10, Number(c.ig_qtd) || 5)) * 2);
+      for (const o of lst) {
+        if (feitas >= LIMITE_ARTES) break;
+        if (await artePronta(o, marca)) continue;
+        await artes(o, ["link"]); feitas++; aqui++;
+      }
+      res[c.dono] = `${aqui} arte(s) preparada(s)`;
+    } catch (e) {
+      res[c.dono] = { erro: (e as Error).message };
+    }
+  }
+  return res;
 }
 
 async function roboStory(chave: string, body: Oferta) {
@@ -355,13 +401,17 @@ async function roboStory(chave: string, body: Oferta) {
     .eq("zap_chave_hash", await sha256hex(chave)).maybeSingle();
   if (!c) return json({ erro: "Chave do robô inválida (use a mesma do robô do WhatsApp)." }, 401);
   if (!c.rec_robo) return json({ erro: "O robô não está ativo nesta conta." }, 403);
-  const saida = async (lst: Oferta[]) => {
+  // Desenha no máximo `maxNovas` artes por chamada (o resto fica para a próxima rodada ou para o cron).
+  const saida = async (lst: Oferta[], maxNovas = LIMITE_ARTES) => {
     const out = [];
+    const marca = await marcaDe(c.dono);
+    let novas = 0;
     for (const o of lst) {
+      if (!(await artePronta(o, marca))) { if (novas >= maxNovas) continue; novas++; }
       try { const { link } = await artes(o, ["link"]); out.push({ id: o.id, num: o.num, titulo: o.titulo, link: o.link, arte: link }); }
       catch (e) { await db.from("achados_config").update({ ig_msg: `Arte do #${o.num} falhou: ${(e as Error).message}`.slice(0, 300) }).eq("dono", c.dono); }
     }
-    return out;
+    return { out, novas };
   };
 
   if (body.acao === "story_config") {
@@ -379,7 +429,7 @@ async function roboStory(chave: string, body: Oferta) {
   }
   if (body.acao === "story_teste") {
     if (body.grupo) { const g = await storyGrupo(c.dono, c.vit_whatsapp, c.assinatura); return json({ ofertas: g ? [g] : [], motivo: g ? "teste" : "sem link do grupo" }); }
-    return json({ ofertas: await saida(await listaParaStory(c.dono, 0, 1)), motivo: "teste" });
+    return json({ ofertas: (await saida(await listaParaStory(c.dono, 0, 1))).out, motivo: "teste" });
   }
   if (body.acao === "story_proximas") {
     if (!c.ig_robo_ativo) return json({ ofertas: [], motivo: "desligado" });
@@ -388,10 +438,11 @@ async function roboStory(chave: string, body: Oferta) {
     if (c.ig_rodada_em && Date.now() - Date.parse(c.ig_rodada_em) < (intervalo * 60 - 30) * 1000) return json({ ofertas: [], motivo: "aguardando intervalo" });
     const lst = await listaParaStory(c.dono, Number(c.ig_desconto_min) || 0, Math.max(1, Math.min(10, Number(c.ig_qtd) || 5)));
     if (!lst.length) { await db.from("achados_config").update({ ig_msg: "Robô de Stories: nenhuma oferta nova com link e desconto suficiente." }).eq("dono", c.dono); return json({ ofertas: [], motivo: "sem ofertas" }); }
+    const { out: ofertas, novas } = await saida(lst);
+    if (!ofertas.length) return json({ ofertas: [], motivo: "preparando as artes" });
     await db.from("achados_config").update({ ig_rodada_em: new Date().toISOString() }).eq("dono", c.dono);
-    const ofertas: Oferta[] = await saida(lst);
     // Último Story da rodada: convite para o grupo do WhatsApp (se o link do grupo estiver em Ajustes > Vitrine)
-    try { const g = await storyGrupo(c.dono, c.vit_whatsapp, c.assinatura); if (g && ofertas.length) ofertas.push(g); }
+    try { const g = await storyGrupo(c.dono, c.vit_whatsapp, c.assinatura, novas < LIMITE_ARTES); if (g) ofertas.push(g); }
     catch (e) { await db.from("achados_config").update({ ig_msg: `Story do grupo falhou: ${(e as Error).message}`.slice(0, 300) }).eq("dono", c.dono); }
     return json({ ofertas, motivo: "ok" });
   }
@@ -433,7 +484,8 @@ Deno.serve(async (req) => {
       const { data: seg } = await db.from("segredos").select("valor").eq("chave", "cron").maybeSingle();
       if (!seg || chave !== seg.valor) return json({ erro: "não autorizado" }, 401);
       if (tarefa !== "postar") return json({ erro: "tarefa desconhecida" }, 400);
-      return json({ stories: await storyAgendado(), alertas: await alertasAgendados(), whatsapp: await whatsappAgendado() });
+      const stories = await storyAgendado(), alertas = await alertasAgendados(), whatsapp = await whatsappAgendado();
+      return json({ stories, alertas, whatsapp, artes: await prepararArtes() });
     }
 
     const zapKey = (req.headers.get("x-zap-key") || "").trim();
