@@ -51,8 +51,11 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
   página de lista, uma página a cada 3–6 min; v7 = Mercado Livre pelo Google Chrome, Edge só se não houver Chrome,
   e diagnóstico de página vazia em `ml_preco_msg`; v6 trouxe
   package.json com `playwright-core`; o atualizador roda `npm install` e volta à anterior se falhar). `robo-whatsapp/` = v6.
-- Agenda (no servidor): das **6h às 4h** da manhã seguinte, 20 ofertas a cada 45 min, pausa de 25–70 s.
-  Campanhas até 22/12: em cada 20, 5 brinquedos + 10 de Natal/formatura + 5 normais (mesma proporção no Telegram).
+- Agenda (no servidor): das **6h às 4h** da manhã seguinte, **30 ofertas** a cada 45 min, pausa de 25–70 s.
+  Divisão (25/11/2026, pedido do dono): 7 brinquedos + 4 Natal/formatura (até 22/12) + 5 beleza e cosméticos + 4 moda feminina
+  + 10 normais. Campanhas `beleza-2026` (`%beleza%`, categoria nova "Beleza e Cosméticos") e `femininos-2026` (`%feminin%`,
+  "Moda Feminina") sem data de fim, com crons `campanha-beleza-*` e `campanha-femininos-*` (busca/processa de 20 em 20 min, 8h–23h).
+  As frações são sequenciais sobre as vagas que sobram (`planoDaRodada`).
 - v5: mensagens em **particular** (tabela `achados_zap_privadas`: dono, numero, oferta jsonb | texto) saem
   em até 20 s, mesmo no meio de uma rodada; o número é conferido no WhatsApp com e sem o 9 extra.
   Para mandar ofertas a alguém: insira linhas com `oferta` = {marketplace, titulo, preco_por, preco_de, link,
