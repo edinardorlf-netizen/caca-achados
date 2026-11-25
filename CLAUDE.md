@@ -103,6 +103,11 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
 - `ml_preco_ativo` = false desliga. A tabela `achados_ml_precos` e as ações `ml_precos_pendentes`/`ml_preco` (produto a produto)
   ficaram como reserva; `ml_preco` com `bloqueio` é o aviso.
 
+## Black Friday (27/11/2026, pedido do dono: ritmo forte)
+- Cron `blackfriday-liga` (27/11 00h de Brasília): `wa_intervalo_min` 20, `ig_intervalo_min` 20 (o código usa no mínimo 30), Stories 8h–23h, palavras extras na Shopee (black friday, oferta relâmpago, queima de estoque, super ofertas) e busca da Shopee às :10/:30/:50.
+- Cron `blackfriday-desliga` (28/11 04h): volta para 45 min / 60 min / 9h–21h, tira as palavras, Shopee só às :50 e apaga os dois crons.
+- Tarefas agendadas da Amazon (notebook com o app do Claude aberto): diária 9h43/15h43/20h43 (repõe se houver menos de 40 na fila) e extra só em 27/11 a cada 2 h.
+
 ## Telegram desligado (23/11/2026)
 - O dono decidiu **trabalhar só com o WhatsApp por enquanto**: `tg_ativo` = false (nada é postado no canal do
   Telegram), `alerta_ativo` = false (o aviso de achadão para Story à mão saiu; o robô de Stories faz isso) e
