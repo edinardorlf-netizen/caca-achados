@@ -52,8 +52,8 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
   e diagnóstico de página vazia em `ml_preco_msg`; v6 trouxe
   package.json com `playwright-core`; o atualizador roda `npm install` e volta à anterior se falhar). `robo-whatsapp/` = v6.
 - Agenda (no servidor): das **6h às 4h** da manhã seguinte, **30 ofertas** a cada 45 min, pausa de 25–70 s.
-  Divisão (25/11/2026, pedido do dono): 7 brinquedos + 4 Natal/formatura (até 22/12) + 5 beleza e cosméticos + 4 moda feminina
-  + 10 normais. Campanhas `beleza-2026` (`%beleza%`, categoria nova "Beleza e Cosméticos") e `femininos-2026` (`%feminin%`,
+  Divisão (25/11/2026, pedido do dono): 5 brinquedos + 4 Natal/formatura (até 22/12) + 6 beleza e cosméticos + 6 moda feminina
+  + 9 normais. Campanhas `beleza-2026` (`%beleza%`, categoria nova "Beleza e Cosméticos") e `femininos-2026` (`%feminin%`,
   "Moda Feminina") sem data de fim, com crons `campanha-beleza-*` e `campanha-femininos-*` (busca/processa de 20 em 20 min, 8h–23h).
   As frações são sequenciais sobre as vagas que sobram (`planoDaRodada`).
 - v5: mensagens em **particular** (tabela `achados_zap_privadas`: dono, numero, oferta jsonb | texto) saem
