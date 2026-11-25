@@ -320,10 +320,12 @@ async function lerListaML() {
   try {
     // v8: alterna os mais vendidos por categoria (página de cada produto, a estratégia de antes)
     // com as listas (Ofertas do dia e buscas): 2 produtos para cada lista.
-    mlVez = (mlVez + 1) % 3;
-    if (mlVez !== 0) {
+    // v11 (25/11/2026, pedido do dono): só abre a página de cada produto que a busca trouxe; não percorre mais as listas.
+    {
       const { item } = await api({ acao: "ml_precos_pendentes" });
       if (item) { pg = await (await navegadorML()).newPage(); await lerProdutoML(item, pg); return; }
+      mlProxima = Date.now() + 20 * 60 * 1000; // fila vazia: tenta de novo em 20 min
+      return;
     }
     const { url, rotulo } = await api({ acao: "ml_lista_proxima" });
     if (!url) { mlProxima = Date.now() + 30 * 60 * 1000; return; }
