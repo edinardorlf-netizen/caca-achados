@@ -341,8 +341,12 @@ async function sha256hex(t: string) {
 }
 async function listaParaStory(dono: string, minDesc: number, qtd: number) {
   const hoje = new Date().toISOString().slice(0, 10);
+  // 25/11/2026 (pedido do dono): Stories em sincronia com o WhatsApp — só ofertas que saíram no grupo nas últimas 6 h
+  // (as mais recentes primeiro), para não postar oferta antiga com preço velho.
+  const desde = new Date(Date.now() - 6 * 3600e3).toISOString();
   const { data } = await db.from("achados_ofertas").select("*").eq("dono", dono).not("link", "is", null).eq("exemplo", false)
-    .is("ig_postado_em", null).is("story_em", null).in("status", ["nova", "aprovada", "postada"]).or(`validade.is.null,validade.gte.${hoje}`).limit(300);
+    .is("ig_postado_em", null).is("story_em", null).in("status", ["nova", "aprovada", "postada"]).or(`validade.is.null,validade.gte.${hoje}`)
+    .gte("wa_avisado_em", desde).order("wa_avisado_em", { ascending: false }).limit(300);
   const lst = (data || []).filter((o: Oferta) => (descontoDe(o) || 0) >= minDesc);
   lst.sort((a: Oferta, b: Oferta) => (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
   return lst.slice(0, qtd);
