@@ -177,6 +177,149 @@ async function vigia() {
   return res;
 }
 
+// ---------- Preços do Mercado Livre pelo robô (v6) ----------
+// Em 24/11/2026 o Mercado Livre passou a recusar (403) os preços de produtos para apps de terceiros.
+// A lista dos mais vendidos e os dados do produto (nome, foto) continuam liberados: o servidor monta a fila
+// (achados_ml_precos) e o robô do computador abre cada página, lê o preço "de"/"por" e devolve aqui.
+// Com desconto, vira oferta normal (com link de afiliado) e entra na fila do WhatsApp.
+const ML = "https://api.mercadolibre.com";
+async function mlGet(path: string, token: string) {
+  const r = await fetch(ML + path, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } });
+  if (!r.ok) return null;
+  return await r.json().catch(() => null);
+}
+async function mlEncher(dono: string) {
+  const { data: cfg } = await db.from("achados_config").select("ml_conectado,ml_categorias,ml_categorias_nomes,ml_preco_cursor,ml_preco_ativo").eq("dono", dono).maybeSingle();
+  if (!cfg?.ml_conectado || !cfg.ml_preco_ativo) return 0;
+  const cats: string[] = cfg.ml_categorias || [];
+  if (!cats.length) return 0;
+  const { data: seg } = await db.rpc("achados_ml_segredos", { p_dono: dono });
+  const token = (seg || [])[0]?.access;
+  if (!token) return 0; // o achados-ml renova o token de hora em hora
+  let novos = 0;
+  for (let tent = 0; tent < 3 && !novos; tent++) {
+    const i = (Number(cfg.ml_preco_cursor || 0) + tent) % cats.length;
+    const cat = cats[i];
+    const h = await mlGet(`/highlights/MLB/category/${cat}`, token);
+    // deno-lint-ignore no-explicit-any
+    const prods = ((h?.content || []) as any[]).filter((x) => x.type === "PRODUCT").slice(0, 20);
+    const ids = prods.map((x) => String(x.id));
+    if (!ids.length) continue;
+    const limite = new Date(Date.now() - 24 * 3600e3).toISOString();
+    const { data: ja } = await db.from("achados_ml_precos").select("produto_id,conferido_em").eq("dono", dono).in("produto_id", ids);
+    // deno-lint-ignore no-explicit-any
+    const recentes = new Set((ja || []).filter((x: any) => !x.conferido_em || x.conferido_em > limite).map((x: any) => x.produto_id));
+    for (const p of prods) {
+      const id = String(p.id);
+      if (recentes.has(id)) continue;
+      const d = await mlGet(`/products/${id}`, token);
+      if (!d?.name) continue;
+      const foto = d.pictures?.[0]?.secure_url || d.pictures?.[0]?.url || null;
+      await db.from("achados_ml_precos").upsert({
+        dono, produto_id: id, titulo: d.name, imagem: foto ? String(foto).replace(/^http:/, "https:") : null,
+        link_produto: `https://www.mercadolivre.com.br/p/${id}`, ml_categoria: cat,
+        categoria: (cfg.ml_categorias_nomes || {})[cat] || null, posicao: Number(p.position) || null,
+        pedido_em: new Date().toISOString(), conferido_em: null, erro: null,
+      }, { onConflict: "dono,produto_id" });
+      novos++;
+    }
+    await db.from("achados_config").update({ ml_preco_cursor: (i + 1) % cats.length }).eq("dono", dono);
+  }
+  return novos;
+}
+async function mlPendente(dono: string) {
+  const pega = () => db.from("achados_ml_precos").select("produto_id,link_produto,titulo").eq("dono", dono).is("conferido_em", null)
+    .order("posicao", { ascending: true, nullsFirst: false }).order("pedido_em").limit(1).maybeSingle();
+  let { data } = await pega();
+  if (!data) { await mlEncher(dono); ({ data } = await pega()); }
+  if (!data) return { item: null };
+  return { item: { produto_id: data.produto_id, url: data.link_produto, titulo: data.titulo } };
+}
+// deno-lint-ignore no-explicit-any
+async function mlSalvarPreco(dono: string, body: any) {
+  const id = String(body.produto_id || "");
+  const agora = new Date().toISOString();
+  if (!body.bloqueio && !/^MLB\d+$/.test(id)) return { erro: "produto inválido" };
+  if (body.bloqueio) {
+    const msg = String(body.erro || "O Mercado Livre pediu verificação.").slice(0, 300);
+    await db.from("achados_config").update({ ml_preco_msg: `${agora.slice(0, 16)} ${msg}` }).eq("dono", dono);
+    const { data: al } = await db.from("achados_config").select("zap_aviso_numero").eq("dono", dono).maybeSingle();
+    if (al?.zap_aviso_numero) await db.from("achados_zap_privadas").insert({ dono, numero: al.zap_aviso_numero, texto: `🛑 *Preços do Mercado Livre*\n${msg}\nO robô parou de abrir páginas do Mercado Livre por 6 horas.` });
+    return { ok: true };
+  }
+  const por = Number(body.preco_por), de = body.preco_de != null ? Number(body.preco_de) : null;
+  if (body.erro || !(por > 0)) {
+    await db.from("achados_ml_precos").update({ conferido_em: agora, erro: String(body.erro || "sem preço na página").slice(0, 200) }).eq("dono", dono).eq("produto_id", id);
+    return { ok: true, oferta: false };
+  }
+  const { data: r } = await db.from("achados_ml_precos").update({ conferido_em: agora, erro: null, preco_por: por, preco_de: de }).eq("dono", dono).eq("produto_id", id).select("*").maybeSingle();
+  if (!r) return { erro: "produto não está na fila" };
+  const { data: cf } = await db.from("achados_config").select("desconto_min").eq("dono", dono).maybeSingle();
+  const desc = de && de > por ? Math.round((1 - por / de) * 100) : 0;
+  if (!de || de <= por || desc < Number(cf?.desconto_min || 0) || desc < 1) return { ok: true, oferta: false, desconto: desc };
+  const { error } = await db.from("achados_ofertas").upsert({
+    dono, titulo: r.titulo, marketplace: "meli", fonte: "ml", ml_item_id: id, ml_categoria: r.ml_categoria, ml_posicao: r.posicao,
+    categoria: r.categoria, link_produto: r.link_produto, preco_de: de, preco_por: por, imagem: r.imagem,
+  }, { onConflict: "dono,ml_item_id" });
+  if (error) return { erro: error.message };
+  await db.rpc("achados_aplicar_afiliado", { p_dono: dono });
+  await db.from("achados_config").update({ ml_preco_msg: `${agora.slice(0, 16)} oferta pelo robô: ${String(r.titulo).slice(0, 60)} (${desc}% OFF)` }).eq("dono", dono);
+  return { ok: true, oferta: true, desconto: desc };
+}
+
+// Modo principal: páginas de lista (Ofertas do dia + busca por palavra com filtro de desconto).
+// Cada página traz 30–60 produtos já com o preço "de"/"por", então o robô abre poucas páginas.
+const PAGINAS_OFERTAS = 8;
+async function mlListaProxima(dono: string) {
+  const { data: cfg } = await db.from("achados_config").select("ml_preco_ativo,ml_lista_cursor,ml_palavras,desconto_min").eq("dono", dono).maybeSingle();
+  if (!cfg?.ml_preco_ativo) return { url: null };
+  const pal: string[] = (cfg.ml_palavras || []).map((p: string) => String(p).trim()).filter(Boolean);
+  const total = PAGINAS_OFERTAS + pal.length;
+  const i = Number(cfg.ml_lista_cursor || 0) % total;
+  await db.from("achados_config").update({ ml_lista_cursor: (i + 1) % total }).eq("dono", dono);
+  if (i < PAGINAS_OFERTAS) return { url: `https://www.mercadolivre.com.br/ofertas?page=${i + 1}`, rotulo: `Ofertas do dia, página ${i + 1}` };
+  const p = pal[i - PAGINAS_OFERTAS];
+  const slug = p.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const min = Math.max(10, Number(cfg.desconto_min || 0));
+  return { url: `https://lista.mercadolivre.com.br/${slug}_Desconto_${min}-100_NoIndex_True`, rotulo: `Busca: ${p}` };
+}
+// deno-lint-ignore no-explicit-any
+async function mlListaSalvar(dono: string, body: any) {
+  // deno-lint-ignore no-explicit-any
+  const itens: any[] = Array.isArray(body.itens) ? body.itens.slice(0, 80) : [];
+  const { data: cf } = await db.from("achados_config").select("desconto_min").eq("dono", dono).maybeSingle();
+  const min = Number(cf?.desconto_min || 0);
+  const linhas = [];
+  for (const it of itens) {
+    const id = String(it.id || "");
+    const por = Number(it.por), de = it.de != null ? Number(it.de) : null;
+    const link = String(it.link || "");
+    if (!/^MLB\d+$/.test(id) || !(por > 0) || !de || de <= por) continue;
+    if (!/^https:\/\/(www|produto)\.mercadolivre\.com\.br\//.test(link)) continue;
+    const desc = Math.round((1 - por / de) * 100);
+    if (desc < Math.max(1, min) || linhas.some((l) => l.ml_item_id === id)) continue;
+    linhas.push({ dono, titulo: String(it.titulo || "").slice(0, 300), marketplace: "meli", fonte: "ml", ml_item_id: id,
+      link_produto: link, preco_de: de, preco_por: por, imagem: it.imagem ? String(it.imagem).slice(0, 500) : null,
+      categoria: body.rotulo ? String(body.rotulo).slice(0, 80) : null });
+  }
+  let novos = 0;
+  if (linhas.length) {
+    const { data: ja } = await db.from("achados_ofertas").select("ml_item_id").eq("dono", dono).in("ml_item_id", linhas.map((l) => l.ml_item_id));
+    const tem = new Set((ja || []).map((x) => x.ml_item_id));
+    novos = linhas.filter((l) => !tem.has(l.ml_item_id)).length;
+    // Os que já existem só têm o preço atualizado (o título/categoria/foto originais ficam).
+    const novas = linhas.filter((l) => !tem.has(l.ml_item_id));
+    if (novas.length) { const { error } = await db.from("achados_ofertas").insert(novas); if (error) return { erro: error.message }; }
+    for (const l of linhas.filter((l) => tem.has(l.ml_item_id))) {
+      await db.from("achados_ofertas").update({ preco_de: l.preco_de, preco_por: l.preco_por }).eq("dono", dono).eq("ml_item_id", l.ml_item_id);
+    }
+    await db.rpc("achados_aplicar_afiliado", { p_dono: dono });
+  }
+  const msg = `${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} · ${body.rotulo || "lista"}: ${itens.length} lidos, ${linhas.length} com desconto, ${novos} novos.`;
+  await db.from("achados_config").update({ ml_preco_msg: msg, ml_sinc_em: new Date().toISOString(), ml_sinc_ok: true, ml_sinc_msg: `Robô (navegador): ${msg}` }).eq("dono", dono);
+  return { ok: true, lidos: itens.length, com_desconto: linhas.length, novos };
+}
+
 Deno.serve(async (req) => {
   try {
     if (req.method !== "POST") return json({ erro: "use POST" }, 405);
@@ -261,6 +404,11 @@ Deno.serve(async (req) => {
       } catch (_) { /* o aviso é só um extra */ }
       return json({ ok: true });
     }
+    // v6 do robô: preços do Mercado Livre lidos no navegador do computador (a API bloqueou os preços).
+    if (body.acao === "ml_precos_pendentes") return json(await mlPendente(c.dono));
+    if (body.acao === "ml_preco") return json(await mlSalvarPreco(c.dono, body));
+    if (body.acao === "ml_lista_proxima") return json(await mlListaProxima(c.dono));
+    if (body.acao === "ml_lista") return json(await mlListaSalvar(c.dono, body));
     if (body.acao === "erro") {
       await db.from("achados_config").update({ wa_msg: `Robô: ${String(body.mensagem || "erro").slice(0, 250)}` }).eq("dono", c.dono);
       return json({ ok: true });

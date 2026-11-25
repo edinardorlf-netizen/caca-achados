@@ -250,15 +250,98 @@ async function rodar(teste = false) {
   } finally { ocupado = false; }
 }
 
+// v6: ofertas do Mercado Livre lidas no navegador (Edge) deste computador.
+// Em 24/11/2026 o Mercado Livre bloqueou os preços na API para apps de terceiros. O robô abre, devagar,
+// as páginas "Ofertas do dia" e as buscas com filtro de desconto (30–60 produtos por página, já com
+// "de"/"por") e manda para o servidor, que monta o link de afiliado e põe na fila do WhatsApp.
+// Risco aceito pelo dono (25/11/2026). Se aparecer verificação/captcha, PARA por 6 h e avisa; nunca contorna.
+let mlOcupado = false, mlPausaAte = 0, mlNav = null, mlDesligado = false, mlProxima = Date.now() + 60 * 1000;
+const PERFIL_ML = path.join(AQUI, "perfil-mercadolivre");
+async function navegadorML() {
+  if (mlNav) return mlNav;
+  const { chromium } = await import("playwright-core");
+  mlNav = await chromium.launchPersistentContext(PERFIL_ML, {
+    channel: cfg.ML_NAVEGADOR || "msedge", headless: cfg.ML_JANELA !== "sim", locale: "pt-BR",
+    viewport: { width: 1366, height: 900 }, timezoneId: "America/Sao_Paulo",
+  });
+  mlNav.on("close", () => { mlNav = null; });
+  return mlNav;
+}
+async function lerListaML() {
+  if (mlOcupado || mlDesligado || !pronto || Date.now() < mlPausaAte || Date.now() < mlProxima) return;
+  const h = new Date().getHours();
+  if (h < 7 || h >= 23) return; // só de dia, como uma pessoa
+  mlOcupado = true;
+  let pg;
+  try {
+    const { url, rotulo } = await api({ acao: "ml_lista_proxima" });
+    if (!url) { mlProxima = Date.now() + 30 * 60 * 1000; return; }
+    let ctx;
+    try { ctx = await navegadorML(); }
+    catch (e) {
+      mlDesligado = true;
+      log("Mercado Livre: não consegui abrir o navegador Edge (", e.message.slice(0, 140), "). Leitura de preços desligada até reiniciar.");
+      await api({ acao: "ml_preco", bloqueio: true, erro: `O robô não conseguiu abrir o navegador Edge no computador: ${e.message.slice(0, 120)}` }).catch(() => {});
+      return;
+    }
+    pg = await ctx.newPage();
+    await pg.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+    await pg.waitForTimeout(aleat(2500, 5000));
+    for (let i = 0; i < 4; i++) { await pg.mouse.wheel(0, aleat(700, 1300)); await pg.waitForTimeout(aleat(600, 1400)); }
+    const atual = pg.url();
+    if (/account-verification|suspicious|captcha|\/login|registration/i.test(atual)) {
+      mlPausaAte = Date.now() + 6 * 3600 * 1000;
+      log("Mercado Livre pediu verificação. Parando a leitura de preços por 6 horas.");
+      await api({ acao: "ml_preco", bloqueio: true, erro: "O Mercado Livre mostrou uma tela de verificação (anti-robô)." }).catch(() => {});
+      return;
+    }
+    const itens = await pg.evaluate(() => {
+      const reais = (t) => {
+        const m = String(t || "").match(/([\d.]+)\s*rea(?:is|les)(?:\s*c[oa]n?\s*(\d+)\s*centavos?)?/i);
+        return m ? Number(m[1].replace(/\./g, "")) + (m[2] ? Number(m[2]) / 100 : 0) : null;
+      };
+      const out = [];
+      for (const c of document.querySelectorAll(".poly-card")) {
+        if (c.querySelector(".poly-component__ads-promotions, .poly-component__ad-label")) continue; // anúncio patrocinado
+        const a = c.querySelector("a.poly-component__title") || c.querySelector("a[href*='mercadolivre.com.br']");
+        const href = a?.href || "";
+        if (!/^https:\/\/(www|produto)\.mercadolivre\.com\.br\//.test(href)) continue;
+        const u = new URL(href);
+        const f = decodeURIComponent(u.searchParams.get("pdp_filters") || "");
+        const id = (f.match(/item_id:(MLB\d+)/) || [])[1] || (u.pathname.match(/\/p\/(MLB\d+)/) || [])[1] || ((u.pathname.match(/MLB-(\d+)/) || [])[1] ? "MLB" + u.pathname.match(/MLB-(\d+)/)[1] : null);
+        if (!id) continue;
+        const prev = c.querySelector(".andes-money-amount--previous");
+        const cur = [...c.querySelectorAll(".andes-money-amount")].find((e) => !e.classList.contains("andes-money-amount--previous") && !e.closest(".andes-money-amount--previous"));
+        const img = c.querySelector("img");
+        const foto = (img?.getAttribute("data-src") || img?.src || "").replace(/\.webp(\?.*)?$/, ".jpg");
+        out.push({
+          id, titulo: (c.querySelector(".poly-component__title")?.textContent || a.textContent || "").trim(),
+          link: u.origin + u.pathname, imagem: /^https:/.test(foto) ? foto : null,
+          de: reais(prev?.getAttribute("aria-label")), por: reais(cur?.getAttribute("aria-label")),
+        });
+      }
+      return out;
+    });
+    const r = await api({ acao: "ml_lista", rotulo, itens });
+    log(`Mercado Livre · ${rotulo}: ${itens.length} lidos, ${r.com_desconto ?? 0} com desconto, ${r.novos ?? 0} novos.`);
+  } catch (e) {
+    log("Mercado Livre: erro ao ler a página:", e.message.slice(0, 160));
+  } finally {
+    await pg?.close().catch(() => {});
+    mlProxima = Date.now() + aleat(4 * 60, 7 * 60) * 1000; // uma página a cada 4–7 min
+    mlOcupado = false;
+  }
+}
+
 // v4: confere a cada 30 min se há versão nova; se houver, sai (o INICIAR roda o atualizador e liga de novo em 10 s).
 async function verAtualizacao() {
-  if (ocupado || privOcupado) return;
+  if (ocupado || privOcupado || mlOcupado) return;
   try {
     const r = await api({ acao: "atualizacao", versao: VERSAO });
-    if (!r.atual) { log(`Versão nova (${r.versao}) disponível. Reiniciando para atualizar…`); process.exit(0); }
+    if (!r.atual) { log(`Versão nova (${r.versao}) disponível. Reiniciando para atualizar…`); await mlNav?.close().catch(() => {}); process.exit(0); }
   } catch (e) { log("Não consegui checar atualização:", e.message); }
 }
 
 log(`Robô versão ${VERSAO}.`);
 await conectar();
-if (modo === "ligado") { setInterval(() => rodar(false), 60 * 1000); setInterval(mandarPrivadas, 20 * 1000); setInterval(verAtualizacao, 30 * 60 * 1000); }
+if (modo === "ligado") { setInterval(() => rodar(false), 60 * 1000); setInterval(mandarPrivadas, 20 * 1000); setInterval(lerListaML, 30 * 1000); setInterval(verAtualizacao, 30 * 60 * 1000); }
