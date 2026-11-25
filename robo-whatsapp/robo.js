@@ -263,7 +263,8 @@ async function navegadorML() {
   if (mlNav) return mlNav;
   const { chromium } = await import("playwright-core");
   const abrir = (canal) => chromium.launchPersistentContext(path.join(AQUI, `perfil-mercadolivre-${canal}`), {
-    channel: canal, headless: cfg.ML_JANELA !== "sim", locale: "pt-BR",
+    // v9 (25/11/2026, pedido do dono): janela de verdade por padrão (minimizada); o modo sem janela recebia página de erro do ML. ML_JANELA=nao volta ao sem janela.
+    channel: canal, headless: cfg.ML_JANELA === "nao", args: ["--start-minimized"], locale: "pt-BR",
     viewport: { width: 1366, height: 900 }, timezoneId: "America/Sao_Paulo",
   });
   const canal = cfg.ML_NAVEGADOR || "chrome";
