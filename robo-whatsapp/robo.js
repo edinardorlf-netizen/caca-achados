@@ -285,6 +285,7 @@ async function navegadorML() {
 // A aba é aberta por lerListaML, que a fecha no "finally".
 async function lerProdutoML(item, pg) {
   await pg.goto(item.url, { waitUntil: "domcontentloaded", timeout: 45000 });
+  await pg.waitForSelector(".ui-pdp-price__main-container, .ui-pdp-price", { timeout: 25000 }).catch(() => {}); // v10: espera o preço aparecer
   await pg.waitForTimeout(aleat(2500, 5000));
   await pg.mouse.wheel(0, aleat(300, 700));
   await pg.waitForTimeout(aleat(800, 1600));
@@ -336,6 +337,7 @@ async function lerListaML() {
     }
     pg = await ctx.newPage();
     await pg.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+    await pg.waitForSelector(".poly-card", { timeout: 25000 }).catch(() => {}); // v10: espera os produtos aparecerem
     await pg.waitForTimeout(aleat(2500, 5000));
     for (let i = 0; i < 4; i++) { await pg.mouse.wheel(0, aleat(700, 1300)); await pg.waitForTimeout(aleat(600, 1400)); }
     const atual = pg.url();
