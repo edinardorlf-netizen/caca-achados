@@ -99,7 +99,8 @@ async function privadasPendentes(c: Oferta) {
 async function proximas(dono: string, minDesc: number, qtd: number, maxAfil: number | null = null) {
   const hoje = new Date().toISOString().slice(0, 10);
   const { data } = await db.from("achados_ofertas").select("*").eq("dono", dono).not("link", "is", null).eq("exemplo", false)
-    .is("wa_avisado_em", null).in("status", ["nova", "aprovada", "postada"]).or(`validade.is.null,validade.gte.${hoje}`).limit(400);
+    .is("wa_avisado_em", null).in("status", ["nova", "aprovada", "postada"]).or(`validade.is.null,validade.gte.${hoje}`)
+    .order("status", { ascending: true }).order("criado_em", { ascending: false }).limit(400); // aprovadas e mais novas primeiro (antes o corte de 400 era aleatório)
   const lst = (data || []).filter((o: Oferta) => ((descontoDe(o) || 0) >= minDesc || !!o.cupom) && !(o.canais || []).includes("whatsapp") && !(maxAfil && o.afiliados != null && o.afiliados > maxAfil));
   lst.sort((a: Oferta, b: Oferta) => (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
   // Campanhas ativas (ex.: brinquedos e festas até 22/12): partes fixas de cada rodada, espalhadas no meio das outras ofertas
