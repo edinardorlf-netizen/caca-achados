@@ -88,6 +88,8 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
   A v3 em si precisa ser copiada à mão uma vez no desktop.
 
 ## Mercado Livre pelo navegador (25/11/2026)
+- **PAUSADO pelo dono em 25/11 19:10** até resolver o bloqueio (tela de verificação no Chrome do robô; consulta 498450570 no suporte do ML): `ml_preco_ativo` = false, cron `achados-ml-buscar` desligado, ofertas meli ativas guardadas em `achados_ml_pausa` e marcadas 'descartada' (como voltar: `supabase/migrations/20261125_ml_pausa.sql`).
+- Amazon (25/11): sem API (conta ainda não aprovada; Creators API só com 10 vendas em 30 dias). Ofertas pegas à mão no navegador e gravadas com `amz_asin` + `link` com `amz_tag`, status 'aprovada' (prioridade).
 - Em 24/11 o Mercado Livre passou a recusar os preços para apps de terceiros (403 em `/products/{id}/items` e
   `/sites/MLB/search`; `/highlights` e `/products/{id}` ainda respondem, sem preço). A busca do `achados-ml` ficou em
   "0 conferidos".
