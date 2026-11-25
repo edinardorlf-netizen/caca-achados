@@ -86,23 +86,34 @@ async function buscar(dono: string, deadline: number) {
   // deno-lint-ignore no-explicit-any
   const vistos = new Map<string, { o: any; cat: string }>();
   const avisos: string[] = [];
-  let fimLista = false, semPalavra = false;
+  let fimLista = false, falhasPalavra = 0;
+  const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  // 25/11/2026: o erro 10000 da Shopee é passageiro e aparece mais em pedidos seguidos. Antes, na 1ª falha a
+  // busca por palavra inteira era abandonada. Agora cada palavra tenta 3 vezes (com pausa), depois sem a ordem
+  // por vendas, e só então é pulada; as outras palavras continuam.
   for (const c of consultas) {
     if (Date.now() > deadline) { avisos.push("O tempo acabou; o resto entra na próxima busca."); break; }
-    if (semPalavra && !c.pg) continue;
-    try {
-      const d = await gql(appId, secret, c.q);
-      const nodes = d?.productOfferV2?.nodes || [];
-      if (c.pg && c.pg > 1 && nodes.length < 50) fimLista = true;
-      for (const n of nodes) if (n?.itemId && !vistos.has(String(n.itemId))) vistos.set(String(n.itemId), { o: n, cat: c.nome });
-    } catch (e) {
-      const m = (e as Error).message;
-      if (/AppID|liberou|negado/.test(m)) throw e; // problema de acesso: não adianta seguir
-      // A Shopee às vezes desliga a busca por palavra (erro 10000): avisa uma vez e segue só com os mais vendidos
-      if (!c.pg && /10000/.test(m)) { semPalavra = true; avisos.push("Busca por palavra indisponível na Shopee agora (erro 10000); usando só os mais vendidos."); continue; }
-      avisos.push(`${c.nome}: ${m}`);
+    const tentativas = c.pg ? [c.q] : [c.q, c.q, c.q, c.q.replace(", sortType: 2", "")];
+    for (let t = 0; t < tentativas.length; t++) {
+      if (t > 0) await espera(1500 * t);
+      try {
+        const d = await gql(appId, secret, tentativas[t]);
+        const nodes = d?.productOfferV2?.nodes || [];
+        if (c.pg && c.pg > 1 && nodes.length < 50) fimLista = true;
+        for (const n of nodes) if (n?.itemId && !vistos.has(String(n.itemId))) vistos.set(String(n.itemId), { o: n, cat: c.nome });
+        break;
+      } catch (e) {
+        const m = (e as Error).message;
+        if (/AppID|liberou|negado/.test(m)) throw e; // problema de acesso: não adianta seguir
+        if (/10000/.test(m) && t < tentativas.length - 1) continue;
+        if (!c.pg && /10000/.test(m)) falhasPalavra++;
+        else avisos.push(`${c.nome}: ${m}`);
+        break;
+      }
     }
+    await espera(700); // um pedido de cada vez, com folga
   }
+  if (falhasPalavra) avisos.push(`Busca por palavra: ${falhasPalavra} palavra(s) sem resposta da Shopee (erro 10000) mesmo tentando de novo; voltam na próxima busca.`);
   if (paginas.length) await db.from("achados_config").update({ shp_pag: fimLista || pag0 + 4 > 40 ? 2 : pag0 + 4 }).eq("dono", dono);
   const hoje = Date.now() / 1000;
   const bons = [...vistos.values()].filter(({ o }) => {
