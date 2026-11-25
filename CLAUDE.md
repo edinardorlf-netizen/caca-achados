@@ -46,7 +46,8 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
   hibernar (o robô de lances do LicitaPro roda no mesmo computador).
 - **Atualização sozinha:** o código publicado fica em `zap_codigo` (versao, arquivos[{nome, conteudo, sha256}];
   o atualizador só aceita `robo.js` e `package.json`). O robô confere a cada 30 min entre rodadas e reinicia.
-  Para publicar: insira a versão nova em `zap_codigo` com o sha256 certo. **Versão atual: 6** (robo.js sha 2de3860c…,
+  Para publicar: insira a versão nova em `zap_codigo` com o sha256 certo. **Versão atual: 7** (robo.js sha a1cb7989…; v7 = Mercado Livre pelo Google Chrome, Edge só se não houver Chrome,
+  e diagnóstico de página vazia em `ml_preco_msg`; v6 trouxe
   package.json com `playwright-core`; o atualizador roda `npm install` e volta à anterior se falhar). `robo-whatsapp/` = v6.
 - Agenda (no servidor): das **6h às 4h** da manhã seguinte, 20 ofertas a cada 45 min, pausa de 25–70 s.
   Campanhas até 22/12: em cada 20, 5 brinquedos + 10 de Natal/formatura + 5 normais (mesma proporção no Telegram).
@@ -85,8 +86,8 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
 - Em 24/11 o Mercado Livre passou a recusar os preços para apps de terceiros (403 em `/products/{id}/items` e
   `/sites/MLB/search`; `/highlights` e `/products/{id}` ainda respondem, sem preço). A busca do `achados-ml` ficou em
   "0 conferidos".
-- Decisão do dono (risco aceito para a conta de afiliado): o **robô do WhatsApp v6** abre no Edge do desktop
-  (playwright-core, perfil `perfil-mercadolivre`, sem janela; `ML_JANELA=sim` no config.env mostra a janela) uma
+- Decisão do dono (risco aceito para a conta de afiliado): o **robô do WhatsApp v7** abre no Google Chrome do desktop (Edge se não houver Chrome)
+  (playwright-core, perfil `perfil-mercadolivre-<navegador>`, `ML_NAVEGADOR` no config.env força outro, sem janela; `ML_JANELA=sim` no config.env mostra a janela) uma
   página a cada 4–7 min, das 7h às 23h: "Ofertas do dia" (8 páginas) e buscas `lista.mercadolivre.com.br/<palavra>_Desconto_N-100`
   com as palavras de `achados_config.ml_palavras` (cópia das da Shopee). Lê os cards `.poly-card` (preço "Antes"/atual
   pelo aria-label; pula patrocinados) e manda para a `achados-zap` (`ml_lista_proxima`, `ml_lista`), que grava em

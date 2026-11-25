@@ -256,14 +256,26 @@ async function rodar(teste = false) {
 // "de"/"por") e manda para o servidor, que monta o link de afiliado e põe na fila do WhatsApp.
 // Risco aceito pelo dono (25/11/2026). Se aparecer verificação/captcha, PARA por 6 h e avisa; nunca contorna.
 let mlOcupado = false, mlPausaAte = 0, mlNav = null, mlDesligado = false, mlProxima = Date.now() + 60 * 1000;
-const PERFIL_ML = path.join(AQUI, "perfil-mercadolivre");
+// v7 (25/11/2026, pedido do dono): usa o Google Chrome; sem Chrome instalado, usa o Edge e avisa uma vez.
+let mlAvisouChrome = false;
 async function navegadorML() {
   if (mlNav) return mlNav;
   const { chromium } = await import("playwright-core");
-  mlNav = await chromium.launchPersistentContext(PERFIL_ML, {
-    channel: cfg.ML_NAVEGADOR || "msedge", headless: cfg.ML_JANELA !== "sim", locale: "pt-BR",
+  const abrir = (canal) => chromium.launchPersistentContext(path.join(AQUI, `perfil-mercadolivre-${canal}`), {
+    channel: canal, headless: cfg.ML_JANELA !== "sim", locale: "pt-BR",
     viewport: { width: 1366, height: 900 }, timezoneId: "America/Sao_Paulo",
   });
+  const canal = cfg.ML_NAVEGADOR || "chrome";
+  try { mlNav = await abrir(canal); }
+  catch (e) {
+    if (cfg.ML_NAVEGADOR || canal === "msedge") throw e;
+    mlNav = await abrir("msedge");
+    if (!mlAvisouChrome) {
+      mlAvisouChrome = true;
+      log("Mercado Livre: Google Chrome não encontrado; usando o Edge.", e.message.slice(0, 120));
+      await api({ acao: "erro", mensagem: "Leitura do Mercado Livre: o Google Chrome não está instalado no computador do robô; usando o Edge por enquanto." }).catch(() => {});
+    }
+  }
   mlNav.on("close", () => { mlNav = null; });
   return mlNav;
 }
@@ -322,7 +334,19 @@ async function lerListaML() {
       }
       return out;
     });
-    const r = await api({ acao: "ml_lista", rotulo, itens });
+    // Página sem produtos: guarda o que apareceu (título e começo do texto) para entender o motivo.
+    let rot = rotulo;
+    if (!itens.length) {
+      const d = await pg.evaluate(() => ({ t: document.title, x: (document.body?.innerText || "").replace(/\s+/g, " ").trim().slice(0, 160), n: document.querySelectorAll(".poly-card").length }));
+      if (/verifi|captcha|rob[oô]|suspeit|incomum|confirme que/i.test(`${d.t} ${d.x}`)) {
+        mlPausaAte = Date.now() + 6 * 3600 * 1000;
+        log("Mercado Livre pediu verificação (", d.t, "). Parando a leitura por 6 horas.");
+        await api({ acao: "ml_preco", bloqueio: true, erro: `O Mercado Livre mostrou uma tela de verificação: "${d.t}".` }).catch(() => {});
+        return;
+      }
+      rot = `${rotulo} [página vazia: "${d.t}" · cards ${d.n} · ${d.x}]`;
+    }
+    const r = await api({ acao: "ml_lista", rotulo: rot, itens });
     log(`Mercado Livre · ${rotulo}: ${itens.length} lidos, ${r.com_desconto ?? 0} com desconto, ${r.novos ?? 0} novos.`);
   } catch (e) {
     log("Mercado Livre: erro ao ler a página:", e.message.slice(0, 160));
