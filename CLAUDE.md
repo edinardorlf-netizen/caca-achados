@@ -46,7 +46,9 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
   hibernar (o robô de lances do LicitaPro roda no mesmo computador).
 - **Atualização sozinha:** o código publicado fica em `zap_codigo` (versao, arquivos[{nome, conteudo, sha256}];
   o atualizador só aceita `robo.js` e `package.json`). O robô confere a cada 30 min entre rodadas e reinicia.
-  Para publicar: insira a versão nova em `zap_codigo` com o sha256 certo. **Versão atual: 7** (robo.js sha a1cb7989…; v7 = Mercado Livre pelo Google Chrome, Edge só se não houver Chrome,
+  Para publicar: insira a versão nova em `zap_codigo` com o sha256 certo. **Versão atual: 8** (robo.js sha e5ac6fbb…; v8 = volta a estratégia dos mais vendidos por categoria: o servidor
+  monta a fila em `achados_ml_precos` pelo `/highlights` e o robô lê o preço na página de cada produto, 2 produtos para cada
+  página de lista, uma página a cada 3–6 min; v7 = Mercado Livre pelo Google Chrome, Edge só se não houver Chrome,
   e diagnóstico de página vazia em `ml_preco_msg`; v6 trouxe
   package.json com `playwright-core`; o atualizador roda `npm install` e volta à anterior se falhar). `robo-whatsapp/` = v6.
 - Agenda (no servidor): das **6h às 4h** da manhã seguinte, 20 ofertas a cada 45 min, pausa de 25–70 s.

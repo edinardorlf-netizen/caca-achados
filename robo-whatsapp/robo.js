@@ -255,6 +255,7 @@ async function rodar(teste = false) {
 // as páginas "Ofertas do dia" e as buscas com filtro de desconto (30–60 produtos por página, já com
 // "de"/"por") e manda para o servidor, que monta o link de afiliado e põe na fila do WhatsApp.
 // Risco aceito pelo dono (25/11/2026). Se aparecer verificação/captcha, PARA por 6 h e avisa; nunca contorna.
+let mlVez = 0;
 let mlOcupado = false, mlPausaAte = 0, mlNav = null, mlDesligado = false, mlProxima = Date.now() + 60 * 1000;
 // v7 (25/11/2026, pedido do dono): usa o Google Chrome; sem Chrome instalado, usa o Edge e avisa uma vez.
 let mlAvisouChrome = false;
@@ -279,6 +280,35 @@ async function navegadorML() {
   mlNav.on("close", () => { mlNav = null; });
   return mlNav;
 }
+// v8: abre a página de um produto (mais vendido da categoria) e lê o preço "de"/"por" do quadro principal.
+// A aba é aberta por lerListaML, que a fecha no "finally".
+async function lerProdutoML(item, pg) {
+  await pg.goto(item.url, { waitUntil: "domcontentloaded", timeout: 45000 });
+  await pg.waitForTimeout(aleat(2500, 5000));
+  await pg.mouse.wheel(0, aleat(300, 700));
+  await pg.waitForTimeout(aleat(800, 1600));
+  const d = await pg.evaluate(() => {
+    const reais = (t) => {
+      const m = String(t || "").match(/([\d.]+)\s*rea(?:is|les)(?:\s*c[oa]n?\s*(\d+)\s*centavos?)?/i);
+      return m ? Number(m[1].replace(/\./g, "")) + (m[2] ? Number(m[2]) / 100 : 0) : null;
+    };
+    const b = document.querySelector(".ui-pdp-price__main-container") || document.querySelector(".ui-pdp-price");
+    const prev = b?.querySelector(".andes-money-amount--previous");
+    const cur = b ? [...b.querySelectorAll(".andes-money-amount")].find((e) => !e.classList.contains("andes-money-amount--previous") && !e.closest(".andes-money-amount--previous")) : null;
+    return { t: document.title, x: (document.body?.innerText || "").replace(/\s+/g, " ").trim().slice(0, 160), url: location.href,
+      de: reais(prev?.getAttribute("aria-label")), por: reais(cur?.getAttribute("aria-label")) };
+  });
+  if (/account-verification|suspicious|captcha|\/login|registration/i.test(d.url) || (!d.por && /verifi|captcha|rob[oô]|suspeit|incomum|confirme que/i.test(`${d.t} ${d.x}`))) {
+    mlPausaAte = Date.now() + 6 * 3600 * 1000;
+    log("Mercado Livre pediu verificação (", d.t, "). Parando a leitura por 6 horas.");
+    await api({ acao: "ml_preco", bloqueio: true, erro: `O Mercado Livre mostrou uma tela de verificação: "${d.t}".` }).catch(() => {});
+    return;
+  }
+  const r = await api({ acao: "ml_preco", produto_id: item.produto_id, preco_por: d.por, preco_de: d.de,
+    erro: d.por ? null : `sem preço na página: "${d.t}" · ${d.x}` });
+  log(`Mercado Livre · produto ${item.produto_id}: ${d.por ? `por ${d.por}${d.de ? ` (de ${d.de})` : ""}` : "sem preço"}${r.oferta ? ` → oferta nova (${r.desconto}% OFF)` : ""}.`);
+}
+
 async function lerListaML() {
   if (mlOcupado || mlDesligado || !pronto || Date.now() < mlPausaAte || Date.now() < mlProxima) return;
   const h = new Date().getHours();
@@ -286,6 +316,13 @@ async function lerListaML() {
   mlOcupado = true;
   let pg;
   try {
+    // v8: alterna os mais vendidos por categoria (página de cada produto, a estratégia de antes)
+    // com as listas (Ofertas do dia e buscas): 2 produtos para cada lista.
+    mlVez = (mlVez + 1) % 3;
+    if (mlVez !== 0) {
+      const { item } = await api({ acao: "ml_precos_pendentes" });
+      if (item) { pg = await (await navegadorML()).newPage(); await lerProdutoML(item, pg); return; }
+    }
     const { url, rotulo } = await api({ acao: "ml_lista_proxima" });
     if (!url) { mlProxima = Date.now() + 30 * 60 * 1000; return; }
     let ctx;
@@ -352,7 +389,7 @@ async function lerListaML() {
     log("Mercado Livre: erro ao ler a página:", e.message.slice(0, 160));
   } finally {
     await pg?.close().catch(() => {});
-    mlProxima = Date.now() + aleat(4 * 60, 7 * 60) * 1000; // uma página a cada 4–7 min
+    mlProxima = Date.now() + aleat(3 * 60, 6 * 60) * 1000; // uma página a cada 3–6 min
     mlOcupado = false;
   }
 }
