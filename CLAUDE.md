@@ -47,12 +47,14 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
   hibernar (o robô de lances do LicitaPro roda no mesmo computador).
 - **Atualização sozinha:** o código publicado fica em `zap_codigo` (versao, arquivos[{nome, conteudo, sha256}];
   o atualizador só aceita `robo.js` e `package.json`). O robô confere a cada 30 min entre rodadas e reinicia.
-  Para publicar: insira a versão nova em `zap_codigo` com o sha256 certo. **Versão atual: 12** (robo.js sha 33676ca7…;
+  Para publicar: insira a versão nova em `zap_codigo` com o sha256 certo. **Versão atual: 13** (robo.js sha 9653ad16…;
+  v13 = a Amazon confere a cada 37 s: com 60 s caía no mesmo instante da rodada (que marca `ocupado` antes) e nunca rodava —
+  cuidado ao criar laços novos com o mesmo período dos que já existem;
   v12 = **ofertas da Amazon pelo Chrome do desktop** (`lerAmazon`, ver seção da Amazon abaixo); v11 = só abre a página de cada produto da fila `achados_ml_precos` (mais vendidos pelo /highlights), sem percorrer listas/buscas; fila vazia = espera 20 min; v10 = espera o preço/cards aparecerem antes de ler; v9 = Chrome com janela de verdade, minimizada, por padrão — sem janela o ML devolvia página de erro; com janela as páginas abriram, mas em 25/11 18:37 o ML mostrou tela de verificação e o robô pausou 6 h; `ML_JANELA=nao` volta ao modo sem janela; v8 = volta a estratégia dos mais vendidos por categoria: o servidor
   monta a fila em `achados_ml_precos` pelo `/highlights` e o robô lê o preço na página de cada produto, 2 produtos para cada
   página de lista, uma página a cada 3–6 min; v7 = Mercado Livre pelo Google Chrome, Edge só se não houver Chrome,
   e diagnóstico de página vazia em `ml_preco_msg`; v6 trouxe
-  package.json com `playwright-core`; o atualizador roda `npm install` e volta à anterior se falhar). `robo-whatsapp/robo.js` = v12
+  package.json com `playwright-core`; o atualizador roda `npm install` e volta à anterior se falhar). `robo-whatsapp/robo.js` = v13
   (com fim de linha LF, igual ao publicado; confira o sha256 antes de derivar a próxima versão).
 - Agenda (no servidor): das **6h às 4h** da manhã seguinte, **30 ofertas** a cada 45 min, pausa de 25–70 s.
   Divisão (25/11/2026, pedido do dono): 5 brinquedos + 4 Natal/formatura (até 22/12) + 6 beleza e cosméticos + 6 moda feminina
@@ -98,7 +100,7 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
 - Duas fontes gravam na mesma tabela, sem duplicar (índice único `achados_ofertas_dono_amz_asin_key` em `(dono, amz_asin)`):
   1. **Tarefas agendadas do notebook** ("Ofertas da Amazon no Caça Achados" e "Amazon extra na Black Friday"), com o app do
      Claude aberto. Continuam valendo; não apagar nem alterar.
-  2. **Robô do WhatsApp v12 no desktop** (24 h, mesmo com o notebook desligado): `lerAmazon()` abre, no mesmo Chrome
+  2. **Robô do WhatsApp v12+ no desktop** (24 h, mesmo com o notebook desligado): `lerAmazon()` abre, no mesmo Chrome
      minimizado do Mercado Livre (`navegadorML()`), uma aba nova com `amazon.com.br/deals` (redireciona para a campanha do
      momento) ou `?promotionsSearchStartIndex=60|120|180&promotionsSearchPageSize=60`; rola 25–30 vezes (900 px, ~1 s) lendo
      os cards `[data-testid="product-card"]` a cada rolagem (lista virtual) e manda {a, t, p, d, i} para a `achados-zap`.

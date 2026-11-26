@@ -405,6 +405,7 @@ async function lerListaML() {
 // e manda para a achados-zap, que filtra 25%+ e monta o link com a tag. No máximo uma página a cada 20–40 min,
 // das 7h às 23h, nunca junto com o Mercado Livre nem no meio de uma rodada do WhatsApp.
 // Captcha/verificação: NÃO contorna; avisa e para a Amazon por 6 h.
+// v13: confere a cada 37 s (com 60 s caía sempre no mesmo instante da rodada, que marca "ocupado" antes, e nunca rodava).
 let amzOcupado = false, amzPausaAte = 0, amzProxima = Date.now() + aleat(3, 8) * 60 * 1000;
 const AMZ_BLOQ = /captcha|digite os caracteres|validatecaptcha|robot/i;
 async function lerAmazon() {
@@ -492,4 +493,4 @@ async function verAtualizacao() {
 
 log(`Robô versão ${VERSAO}.`);
 await conectar();
-if (modo === "ligado") { setInterval(() => rodar(false), 60 * 1000); setInterval(mandarPrivadas, 20 * 1000); setInterval(lerListaML, 30 * 1000); setInterval(lerAmazon, 60 * 1000); setInterval(verAtualizacao, 30 * 60 * 1000); }
+if (modo === "ligado") { setInterval(() => rodar(false), 60 * 1000); setInterval(mandarPrivadas, 20 * 1000); setInterval(lerListaML, 30 * 1000); setInterval(lerAmazon, 37 * 1000); setInterval(verAtualizacao, 30 * 60 * 1000); }
