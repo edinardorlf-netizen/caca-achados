@@ -42,6 +42,11 @@ NO DIA A DIA
 - PARAR-STORIES.bat: para só o robô de Stories.
 - Se o Instagram pedir login de novo, chega um aviso no seu WhatsApp. Abra CONECTAR-INSTAGRAM.bat,
   entre de novo, e o robô volta sozinho.
+- Se o CONECTAR-INSTAGRAM der "Sua versão do Instagram está desatualizada" (o Instagram barra o login
+  da biblioteca), use CONECTAR-PELO-NAVEGADOR.bat: entre em instagram.com no Chrome deste computador,
+  F12 > Application > Cookies > https://www.instagram.com, dois cliques no valor de "sessionid", Ctrl+C,
+  e aperte Enter na janela do conector (ele lê da área de transferência e apaga de lá).
+  Depois NÃO saia da conta nesse Chrome: o robô usa a mesma sessão.
 - Se o Instagram bloquear as postagens, o robô avisa e espera 6 horas antes de tentar de novo.
 - Agenda (de quanto em quanto tempo, horário, desconto mínimo): no app, Ajustes > Instagram.
 
