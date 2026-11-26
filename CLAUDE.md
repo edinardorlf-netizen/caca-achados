@@ -23,7 +23,8 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
     por `achados_shp_segredo(dono)`). Erro 10000 é intermitente: tentar de novo.
   - `achados-ml` — Mercado Livre (OAuth só leitura), mais vendidos com desconto.
   - `achados-zap` — API do robô do WhatsApp (cabeçalho `x-zap-key`; no banco só o hash em `zap_chave_hash`):
-    `proximas`, `confirmar`, `privadas`, `confirmar_privada`, `atualizacao`, `novo_grupo`, `erro`; vigia (cron).
+    `proximas`, `confirmar`, `privadas`, `confirmar_privada`, `atualizacao`, `novo_grupo`, `erro`, `ml_*`,
+    `amz_lista_proxima`, `amz_lista`, `amz_bloqueio`; vigia (cron).
   - `achados-story` — artes dos Stories (satori + resvg, `arte.ts`), Story por API oficial ("LINK NA BIO"),
     avisos no Telegram (achadão, Hora do WhatsApp) e o **robô de Stories** (`x-zap-key`: `story_proximas`,
     `story_teste`, `story_confirmar`, `story_aviso`).
@@ -46,11 +47,13 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
   hibernar (o robô de lances do LicitaPro roda no mesmo computador).
 - **Atualização sozinha:** o código publicado fica em `zap_codigo` (versao, arquivos[{nome, conteudo, sha256}];
   o atualizador só aceita `robo.js` e `package.json`). O robô confere a cada 30 min entre rodadas e reinicia.
-  Para publicar: insira a versão nova em `zap_codigo` com o sha256 certo. **Versão atual: 11** (robo.js sha a0c4a8ed…; v11 = só abre a página de cada produto da fila `achados_ml_precos` (mais vendidos pelo /highlights), sem percorrer listas/buscas; fila vazia = espera 20 min; v10 = espera o preço/cards aparecerem antes de ler; v9 = Chrome com janela de verdade, minimizada, por padrão — sem janela o ML devolvia página de erro; com janela as páginas abriram, mas em 25/11 18:37 o ML mostrou tela de verificação e o robô pausou 6 h; `ML_JANELA=nao` volta ao modo sem janela; v8 = volta a estratégia dos mais vendidos por categoria: o servidor
+  Para publicar: insira a versão nova em `zap_codigo` com o sha256 certo. **Versão atual: 12** (robo.js sha 33676ca7…;
+  v12 = **ofertas da Amazon pelo Chrome do desktop** (`lerAmazon`, ver seção da Amazon abaixo); v11 = só abre a página de cada produto da fila `achados_ml_precos` (mais vendidos pelo /highlights), sem percorrer listas/buscas; fila vazia = espera 20 min; v10 = espera o preço/cards aparecerem antes de ler; v9 = Chrome com janela de verdade, minimizada, por padrão — sem janela o ML devolvia página de erro; com janela as páginas abriram, mas em 25/11 18:37 o ML mostrou tela de verificação e o robô pausou 6 h; `ML_JANELA=nao` volta ao modo sem janela; v8 = volta a estratégia dos mais vendidos por categoria: o servidor
   monta a fila em `achados_ml_precos` pelo `/highlights` e o robô lê o preço na página de cada produto, 2 produtos para cada
   página de lista, uma página a cada 3–6 min; v7 = Mercado Livre pelo Google Chrome, Edge só se não houver Chrome,
   e diagnóstico de página vazia em `ml_preco_msg`; v6 trouxe
-  package.json com `playwright-core`; o atualizador roda `npm install` e volta à anterior se falhar). `robo-whatsapp/` = v6.
+  package.json com `playwright-core`; o atualizador roda `npm install` e volta à anterior se falhar). `robo-whatsapp/robo.js` = v12
+  (com fim de linha LF, igual ao publicado; confira o sha256 antes de derivar a próxima versão).
 - Agenda (no servidor): das **6h às 4h** da manhã seguinte, **30 ofertas** a cada 45 min, pausa de 25–70 s.
   Divisão (25/11/2026, pedido do dono): 5 brinquedos + 4 Natal/formatura (até 22/12) + 6 beleza e cosméticos + 6 moda feminina
   + 9 normais. Campanhas `beleza-2026` (`%beleza%`, categoria nova "Beleza e Cosméticos") e `femininos-2026` (`%feminin%`,
@@ -90,6 +93,24 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
 ## Mercado Livre pelo navegador (25/11/2026)
 - **PAUSADO pelo dono em 25/11 19:10** até resolver o bloqueio (tela de verificação no Chrome do robô; consulta 498450570 no suporte do ML): `ml_preco_ativo` = false, cron `achados-ml-buscar` desligado, ofertas meli ativas guardadas em `achados_ml_pausa` e marcadas 'descartada' (como voltar: `supabase/migrations/20261125_ml_pausa.sql`).
 - Amazon (25/11): sem API (conta ainda não aprovada; Creators API só com 10 vendas em 30 dias). Ofertas pegas à mão no navegador e gravadas com `amz_asin` + `link` com `amz_tag`, status 'aprovada' (prioridade).
+
+## Amazon pelo navegador (26/11/2026)
+- Duas fontes gravam na mesma tabela, sem duplicar (índice único `achados_ofertas_dono_amz_asin_key` em `(dono, amz_asin)`):
+  1. **Tarefas agendadas do notebook** ("Ofertas da Amazon no Caça Achados" e "Amazon extra na Black Friday"), com o app do
+     Claude aberto. Continuam valendo; não apagar nem alterar.
+  2. **Robô do WhatsApp v12 no desktop** (24 h, mesmo com o notebook desligado): `lerAmazon()` abre, no mesmo Chrome
+     minimizado do Mercado Livre (`navegadorML()`), uma aba nova com `amazon.com.br/deals` (redireciona para a campanha do
+     momento) ou `?promotionsSearchStartIndex=60|120|180&promotionsSearchPageSize=60`; rola 25–30 vezes (900 px, ~1 s) lendo
+     os cards `[data-testid="product-card"]` a cada rolagem (lista virtual) e manda {a, t, p, d, i} para a `achados-zap`.
+     No máximo uma página a cada 20–40 min, das 7h às 23h, nunca junto com o Mercado Livre nem no meio de uma rodada.
+- `achados-zap` (v26): `amz_lista_proxima` (rodízio em `achados_config.amz_cursor`; devolve `url: null` com
+  `amz_ativo` = false ou 80+ ofertas da Amazon na fila sem postar), `amz_lista` (só de > por e 25%+; grava marketplace/fonte
+  'amazon', `link_produto` /dp/ASIN, `link` com `?tag=amz_tag`, `link_auto` false, status 'nova', categoria Brinquedos ou
+  Beleza e Cosméticos pelas palavras do título; ASIN já existente e ainda não postado só atualiza o preço) e `amz_bloqueio`.
+- Status em `achados_config.amz_msg`. `amz_ativo` = false desliga só a busca do desktop.
+- Captcha/verificação ("captcha", "Digite os caracteres", "validateCaptcha", "robot"): o robô **não contorna**, chama
+  `amz_bloqueio` (aviso no WhatsApp particular do dono) e para a Amazon por 6 h. Nunca comprar nem clicar em comprar.
+- Migração: `supabase/migrations/20261126_amazon_robo.sql` (`amz_ativo`, `amz_cursor`, `amz_msg`).
 - Em 24/11 o Mercado Livre passou a recusar os preços para apps de terceiros (403 em `/products/{id}/items` e
   `/sites/MLB/search`; `/highlights` e `/products/{id}` ainda respondem, sem preço). A busca do `achados-ml` ficou em
   "0 conferidos".

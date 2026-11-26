@@ -312,7 +312,7 @@ async function lerProdutoML(item, pg) {
 }
 
 async function lerListaML() {
-  if (mlOcupado || mlDesligado || !pronto || Date.now() < mlPausaAte || Date.now() < mlProxima) return;
+  if (mlOcupado || amzOcupado || mlDesligado || !pronto || Date.now() < mlPausaAte || Date.now() < mlProxima) return;
   const h = new Date().getHours();
   if (h < 7 || h >= 23) return; // só de dia, como uma pessoa
   mlOcupado = true;
@@ -399,9 +399,91 @@ async function lerListaML() {
   }
 }
 
+// v12 (26/11/2026, pedido do dono): ofertas da Amazon pelo Chrome deste computador, para a busca continuar com o
+// notebook desligado (as tarefas do notebook continuam; o amz_asin único no servidor evita duplicar).
+// Abre amazon.com.br/deals (ou a página que o servidor mandar), rola aos poucos lendo os cards (a lista é virtual)
+// e manda para a achados-zap, que filtra 25%+ e monta o link com a tag. No máximo uma página a cada 20–40 min,
+// das 7h às 23h, nunca junto com o Mercado Livre nem no meio de uma rodada do WhatsApp.
+// Captcha/verificação: NÃO contorna; avisa e para a Amazon por 6 h.
+let amzOcupado = false, amzPausaAte = 0, amzProxima = Date.now() + aleat(3, 8) * 60 * 1000;
+const AMZ_BLOQ = /captcha|digite os caracteres|validatecaptcha|robot/i;
+async function lerAmazon() {
+  if (amzOcupado || mlOcupado || ocupado || privOcupado || !pronto || Date.now() < amzPausaAte || Date.now() < amzProxima) return;
+  const h = new Date().getHours();
+  if (h < 7 || h >= 23) return;
+  amzOcupado = true;
+  let pg;
+  try {
+    const { url, rotulo, motivo } = await api({ acao: "amz_lista_proxima" });
+    if (!url) { log(`Amazon: nada a buscar agora (${motivo || "sem página"}).`); return; }
+    pg = await (await navegadorML()).newPage();
+    await pg.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+    await pg.waitForSelector('[data-testid="product-card"]', { timeout: 25000 }).catch(() => {});
+    await pg.waitForTimeout(aleat(2500, 4500));
+    const bloqueada = async () => {
+      const u = pg.url();
+      if (AMZ_BLOQ.test(u)) return u;
+      const n = await pg.locator('[data-testid="product-card"]').count().catch(() => 0);
+      if (n) return null;
+      const t = await pg.evaluate(() => `${document.title} ${(document.body?.innerText || "").slice(0, 600)}`).catch(() => "");
+      return AMZ_BLOQ.test(t) ? t.replace(/\s+/g, " ").slice(0, 120) : null;
+    };
+    const bq = await bloqueada();
+    if (bq) {
+      amzPausaAte = Date.now() + 6 * 3600 * 1000;
+      log("Amazon pediu verificação. Parando a busca da Amazon por 6 horas.");
+      await api({ acao: "amz_bloqueio", erro: `Tela: ${bq}` }).catch(() => {});
+      return;
+    }
+    // A lista é virtual (os cards somem ao rolar): lê os que estão na tela a cada rolagem e junta por ASIN.
+    const lidos = new Map();
+    const lerCards = () => pg.evaluate(() => {
+      const num = (s) => Number(String(s).replace(/\./g, "").replace(",", "."));
+      const out = [];
+      for (const c of document.querySelectorAll('[data-testid="product-card"]')) {
+        const href = c.querySelector('a[href*="/dp/"]')?.getAttribute("href") || "";
+        const a = (href.match(/\/dp\/([A-Z0-9]{10})/) || [])[1];
+        if (!a) continue;
+        const txt = c.innerText || "";
+        const linhas = txt.split("\n").map((l) => l.trim()).filter(Boolean);
+        const t = linhas.find((l) => l.length > 25 && !/R\$|\boff\b|Oferta|De:/i.test(l)) || "";
+        const p = (txt.match(/Preço da Oferta:\s*R\$\s*([\d.]+,\d{2}|[\d.]+)/i) || [])[1];
+        const d = (txt.match(/De:\s*R\$\s*([\d.]+,\d{2}|[\d.]+)/i) || [])[1];
+        const src = (c.querySelector("img")?.getAttribute("src") || "").split("?")[0];
+        const i = src ? src.replace(/\._[^/]*_\.jpg$/i, "._AC_SL500_.jpg") : "";
+        out.push({ a, t, p: p ? num(p) : null, d: d ? num(d) : null, i });
+      }
+      return out;
+    });
+    const voltas = aleat(25, 31);
+    for (let k = 0; k < voltas; k++) {
+      for (const it of await lerCards()) { const v = lidos.get(it.a); if (!v || (!v.p && it.p)) lidos.set(it.a, it); }
+      await pg.evaluate(() => window.scrollBy(0, 900));
+      await pg.waitForTimeout(aleat(900, 1400));
+      if (k % 8 === 7 && (await bloqueada())) break; // conferido de novo abaixo
+    }
+    const bq2 = await bloqueada();
+    if (bq2) {
+      amzPausaAte = Date.now() + 6 * 3600 * 1000;
+      log("Amazon pediu verificação no meio da leitura. Parando a busca da Amazon por 6 horas.");
+      await api({ acao: "amz_bloqueio", erro: `Tela: ${bq2}` }).catch(() => {});
+      return;
+    }
+    const itens = [...lidos.values()].filter((x) => x.p && x.d && x.d > x.p);
+    const r = await api({ acao: "amz_lista", rotulo, itens });
+    log(`Amazon · ${rotulo}: ${lidos.size} cards, ${itens.length} com preço de/por, ${r.com_desconto ?? 0} com 25%+, ${r.novos ?? 0} novos.`);
+  } catch (e) {
+    log("Amazon: erro ao ler a página:", String(e.message || e).slice(0, 160));
+  } finally {
+    await pg?.close().catch(() => {});
+    amzProxima = Date.now() + aleat(20 * 60, 40 * 60) * 1000; // uma página a cada 20–40 min
+    amzOcupado = false;
+  }
+}
+
 // v4: confere a cada 30 min se há versão nova; se houver, sai (o INICIAR roda o atualizador e liga de novo em 10 s).
 async function verAtualizacao() {
-  if (ocupado || privOcupado || mlOcupado) return;
+  if (ocupado || privOcupado || mlOcupado || amzOcupado) return;
   try {
     const r = await api({ acao: "atualizacao", versao: VERSAO });
     if (!r.atual) { log(`Versão nova (${r.versao}) disponível. Reiniciando para atualizar…`); await mlNav?.close().catch(() => {}); process.exit(0); }
@@ -410,4 +492,4 @@ async function verAtualizacao() {
 
 log(`Robô versão ${VERSAO}.`);
 await conectar();
-if (modo === "ligado") { setInterval(() => rodar(false), 60 * 1000); setInterval(mandarPrivadas, 20 * 1000); setInterval(lerListaML, 30 * 1000); setInterval(verAtualizacao, 30 * 60 * 1000); }
+if (modo === "ligado") { setInterval(() => rodar(false), 60 * 1000); setInterval(mandarPrivadas, 20 * 1000); setInterval(lerListaML, 30 * 1000); setInterval(lerAmazon, 60 * 1000); setInterval(verAtualizacao, 30 * 60 * 1000); }

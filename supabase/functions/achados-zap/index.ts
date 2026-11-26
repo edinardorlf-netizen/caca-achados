@@ -321,6 +321,78 @@ async function mlListaSalvar(dono: string, body: any) {
   return { ok: true, lidos: itens.length, com_desconto: linhas.length, novos };
 }
 
+// ---------- Amazon pelo robô (v12, 26/11/2026) ----------
+// Sem API de afiliados ainda (precisa de 10 vendas em 30 dias): o robô do desktop abre amazon.com.br/deals no
+// Chrome (a mesma lógica das tarefas do notebook) e manda os cards. Só entra com de > por e 25% OFF ou mais.
+// O amz_asin é único por dono, então o notebook e o desktop nunca duplicam.
+const AMZ_PAGINAS = [0, 60, 120, 180];
+const AMZ_FILA_MAX = 80;
+const AMZ_BRINQ = /hot wheels|barbie|boneca|brinquedo|lego/i;
+const AMZ_BELEZA = /shampoo|m[aá]scara|capilar|leave-in|protetor solar|secador|s[eé]rum|desodorante|aparador|barbeador|escova de dente|perfume|maquiagem|hidratante/i;
+const quando = () => new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+async function amzListaProxima(dono: string) {
+  const { data: cfg } = await db.from("achados_config").select("amz_ativo,amz_cursor").eq("dono", dono).maybeSingle();
+  if (!cfg?.amz_ativo) return { url: null, motivo: "desligado" };
+  const { count } = await db.from("achados_ofertas").select("id", { count: "exact", head: true }).eq("dono", dono)
+    .eq("marketplace", "amazon").eq("exemplo", false).is("wa_avisado_em", null).in("status", ["nova", "aprovada"]);
+  if ((count || 0) >= AMZ_FILA_MAX) return { url: null, motivo: `fila cheia (${count})` };
+  const i = Number(cfg.amz_cursor || 0) % AMZ_PAGINAS.length;
+  await db.from("achados_config").update({ amz_cursor: (i + 1) % AMZ_PAGINAS.length }).eq("dono", dono);
+  const ini = AMZ_PAGINAS[i];
+  return ini
+    ? { url: `https://www.amazon.com.br/deals?promotionsSearchStartIndex=${ini}&promotionsSearchPageSize=60`, rotulo: `Ofertas, a partir do ${ini + 1}º` }
+    : { url: "https://www.amazon.com.br/deals", rotulo: "Ofertas, início" };
+}
+// deno-lint-ignore no-explicit-any
+async function amzListaSalvar(dono: string, body: any) {
+  // deno-lint-ignore no-explicit-any
+  const itens: any[] = Array.isArray(body.itens) ? body.itens.slice(0, 300) : [];
+  const { data: cf } = await db.from("achados_config").select("amz_tag").eq("dono", dono).maybeSingle();
+  const tag = String(cf?.amz_tag || "").trim();
+  if (!tag) return { erro: "sem amz_tag no achados_config" };
+  // deno-lint-ignore no-explicit-any
+  const linhas: any[] = [];
+  for (const it of itens) {
+    const a = String(it.a || "").toUpperCase(), t = String(it.t || "").replace(/\s+/g, " ").trim();
+    const por = Number(it.p), de = Number(it.d);
+    if (!/^[A-Z0-9]{10}$/.test(a) || t.length < 10 || !(por > 0) || !(de > por)) continue;
+    if (Math.round((1 - por / de) * 100) < 25 || linhas.some((l) => l.amz_asin === a)) continue;
+    const img = String(it.i || "");
+    const prod = `https://www.amazon.com.br/dp/${a}`;
+    linhas.push({ dono, titulo: t.slice(0, 300), marketplace: "amazon", fonte: "amazon", amz_asin: a, link_produto: prod,
+      link: `${prod}?tag=${encodeURIComponent(tag)}`, link_auto: false, status: "nova", preco_de: de, preco_por: por,
+      imagem: /^https:\/\/m\.media-amazon\.com\//.test(img) ? img.slice(0, 500) : null,
+      categoria: AMZ_BRINQ.test(t) ? "Brinquedos" : AMZ_BELEZA.test(t) ? "Beleza e Cosméticos" : null });
+  }
+  let novos = 0, atualizados = 0;
+  if (linhas.length) {
+    const { data: ja } = await db.from("achados_ofertas").select("amz_asin,wa_avisado_em").eq("dono", dono).in("amz_asin", linhas.map((l) => l.amz_asin));
+    const tem = new Map((ja || []).map((x) => [x.amz_asin, x.wa_avisado_em]));
+    const novas = linhas.filter((l) => !tem.has(l.amz_asin));
+    if (novas.length) {
+      // upsert com ignoreDuplicates: se o notebook gravou o mesmo ASIN no meio tempo, não dá erro nem duplica
+      const { data: ins, error } = await db.from("achados_ofertas").upsert(novas, { onConflict: "dono,amz_asin", ignoreDuplicates: true }).select("id");
+      if (error) return { erro: error.message };
+      novos = (ins || []).length;
+    }
+    for (const l of linhas.filter((l) => tem.has(l.amz_asin) && !tem.get(l.amz_asin))) {
+      await db.from("achados_ofertas").update({ preco_de: l.preco_de, preco_por: l.preco_por }).eq("dono", dono).eq("amz_asin", l.amz_asin).is("wa_avisado_em", null);
+      atualizados++;
+    }
+  }
+  const msg = `${quando()} · desktop · ${String(body.rotulo || "ofertas").slice(0, 60)}: ${itens.length} lidos, ${linhas.length} com 25%+, ${novos} novos, ${atualizados} com preço atualizado.`;
+  await db.from("achados_config").update({ amz_msg: msg }).eq("dono", dono);
+  return { ok: true, lidos: itens.length, com_desconto: linhas.length, novos, atualizados };
+}
+// deno-lint-ignore no-explicit-any
+async function amzBloqueio(dono: string, body: any) {
+  const det = String(body.erro || "").slice(0, 200);
+  await db.from("achados_config").update({ amz_msg: `${quando()} · desktop · BLOQUEIO: a Amazon pediu verificação; busca parada por 6 h. ${det}`.trim() }).eq("dono", dono);
+  const { data: al } = await db.from("achados_config").select("zap_aviso_numero").eq("dono", dono).maybeSingle();
+  if (al?.zap_aviso_numero) await db.from("achados_zap_privadas").insert({ dono, numero: al.zap_aviso_numero, texto: `🛑 *Amazon*\nA Amazon pediu verificação; a busca da Amazon no desktop parou por 6 h.${det ? `\n${det}` : ""}` });
+  return { ok: true };
+}
+
 Deno.serve(async (req) => {
   try {
     if (req.method !== "POST") return json({ erro: "use POST" }, 405);
@@ -410,6 +482,10 @@ Deno.serve(async (req) => {
     if (body.acao === "ml_preco") return json(await mlSalvarPreco(c.dono, body));
     if (body.acao === "ml_lista_proxima") return json(await mlListaProxima(c.dono));
     if (body.acao === "ml_lista") return json(await mlListaSalvar(c.dono, body));
+    // v12 do robô: ofertas da Amazon lidas no Chrome do desktop.
+    if (body.acao === "amz_lista_proxima") return json(await amzListaProxima(c.dono));
+    if (body.acao === "amz_lista") return json(await amzListaSalvar(c.dono, body));
+    if (body.acao === "amz_bloqueio") return json(await amzBloqueio(c.dono, body));
     if (body.acao === "erro") {
       await db.from("achados_config").update({ wa_msg: `Robô: ${String(body.mensagem || "erro").slice(0, 250)}` }).eq("dono", c.dono);
       return json({ ok: true });
