@@ -127,7 +127,7 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
   ficaram como reserva; `ml_preco` com `bloqueio` é o aviso.
 
 ## Black Friday (27/11/2026, pedido do dono: ritmo forte)
-- Cron `blackfriday-liga` (27/11 00h de Brasília): `wa_intervalo_min` 20, `ig_intervalo_min` 20 (o código usa no mínimo 30), Stories 8h–23h, palavras extras na Shopee (black friday, oferta relâmpago, queima de estoque, super ofertas) e busca da Shopee às :10/:30/:50.
+- Cron `blackfriday-liga` (27/11 00h de Brasília): `wa_intervalo_min` 20, `ig_intervalo_min` 30 (o banco recusa menos de 30: com 20 o cron falhou às 00h e o modo Black Friday só entrou às 16h40, aplicado à mão), Stories 8h–23h, palavras extras na Shopee (black friday, oferta relâmpago, queima de estoque, super ofertas) e busca da Shopee às :10/:30/:50.
 - Cron `blackfriday-desliga` (28/11 04h): volta para 45 min / 60 min / 9h–21h, tira as palavras, Shopee só às :50 e apaga os dois crons.
 - Tarefas agendadas da Amazon (notebook com o app do Claude aberto): diária 9h43/15h43/20h43 (repõe se houver menos de 40 na fila) e extra só em 27/11 a cada 2 h.
 
