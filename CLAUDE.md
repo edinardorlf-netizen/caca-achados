@@ -61,6 +61,9 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
   + 9 normais. Campanhas `beleza-2026` (`%beleza%`, categoria nova "Beleza e Cosméticos") e `femininos-2026` (`%feminin%`,
   "Moda Feminina") sem data de fim, com crons `campanha-beleza-*` e `campanha-femininos-*` (busca/processa de 20 em 20 min, 8h–23h).
   As frações são sequenciais sobre as vagas que sobram (`planoDaRodada`).
+  **Todas as lojas em toda rodada** (27/11/2026, pedido do dono; achados-zap v27, `garantirLojas`): Shopee, Amazon e Mercado Livre
+  têm pelo menos 3 vagas por rodada (rodada com menos de 15: 1), se houver oferta delas na fila; a vaga sai da loja com mais ofertas,
+  de uma oferta fora de campanha e do fim da lista.
 - v5: mensagens em **particular** (tabela `achados_zap_privadas`: dono, numero, oferta jsonb | texto) saem
   em até 20 s, mesmo no meio de uma rodada; o número é conferido no WhatsApp com e sem o 9 extra.
   Para mandar ofertas a alguém: insira linhas com `oferta` = {marketplace, titulo, preco_por, preco_de, link,

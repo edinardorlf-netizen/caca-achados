@@ -105,7 +105,7 @@ async function proximas(dono: string, minDesc: number, qtd: number, maxAfil: num
   lst.sort((a: Oferta, b: Oferta) => (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
   // Campanhas ativas (ex.: brinquedos e festas até 22/12): partes fixas de cada rodada, espalhadas no meio das outras ofertas
   const camps = await campanhasAtivas(dono);
-  if (!camps.length) return lst.slice(0, qtd);
+  if (!camps.length) return garantirLojas(dono, lst.slice(0, qtd), qtd, minDesc, maxAfil, camps);
   const filas: Record<string, Oferta[]> = {};
   for (const c of camps) {
     const { data: cd } = await db.from("achados_ofertas").select("*").eq("dono", dono).not("link", "is", null).eq("exemplo", false)
@@ -119,6 +119,45 @@ async function proximas(dono: string, minDesc: number, qtd: number, maxAfil: num
   for (const vaga of planoDaRodada(qtd, camps)) {
     const o = filas[vaga].shift() || filas.normal.shift() || camps.map((c) => filas[c.id].shift()).find(Boolean);
     if (o) out.push(o);
+  }
+  return garantirLojas(dono, out, qtd, minDesc, maxAfil, camps);
+}
+
+// Toda rodada leva ofertas de todas as lojas que têm oferta na fila (pedido do dono, 27/11/2026).
+// Cada loja ganha pelo menos LOJA_MIN vagas (rodada pequena: 1); a vaga sai da loja que tem mais, de preferência de uma
+// oferta fora de campanha e do fim da lista (a de menor prioridade). Sem oferta daquela loja na fila, nada muda.
+const LOJAS = ["shopee", "amazon", "meli"];
+async function garantirLojas(dono: string, out: Oferta[], qtd: number, minDesc: number, maxAfil: number | null, camps: Campanha[]) {
+  if (qtd < 2) return out;
+  const min = qtd >= 15 ? 3 : 1;
+  const hoje = new Date().toISOString().slice(0, 10);
+  const usados = new Set(out.map((o) => o.id));
+  for (const loja of LOJAS) {
+    const tem = out.filter((o) => o.marketplace === loja).length;
+    if (tem >= min) continue;
+    const { data } = await db.from("achados_ofertas").select("*").eq("dono", dono).eq("marketplace", loja).not("link", "is", null)
+      .eq("exemplo", false).is("wa_avisado_em", null).in("status", ["nova", "aprovada", "postada"])
+      .or(`validade.is.null,validade.gte.${hoje}`).order("status", { ascending: true }).order("criado_em", { ascending: false }).limit(60);
+    const cand = (data || []).filter((o: Oferta) => !usados.has(o.id) && ((descontoDe(o) || 0) >= minDesc || !!o.cupom)
+      && !(o.canais || []).includes("whatsapp") && !(maxAfil && o.afiliados != null && o.afiliados > maxAfil))
+      .sort((a: Oferta, b: Oferta) => (b.status === "aprovada" ? 1 : 0) - (a.status === "aprovada" ? 1 : 0) || pontuacao(b) - pontuacao(a));
+    for (let k = tem; k < min && cand.length; k++) {
+      const novo = cand.shift()!;
+      if (out.length < qtd) { out.push(novo); usados.add(novo.id); continue; }
+      const conta: Record<string, number> = {};
+      out.forEach((o) => (conta[o.marketplace] = (conta[o.marketplace] || 0) + 1));
+      const maior = Object.keys(conta).filter((m) => m !== loja).sort((a, b) => conta[b] - conta[a])[0];
+      if (!maior || conta[maior] <= min) break;
+      let i = -1;
+      for (let j = out.length - 1; j >= 0; j--) {
+        if (out[j].marketplace !== maior || out[j].status === "aprovada") continue;
+        if (i < 0) i = j;
+        if (!camps.some((c) => mesmaCategoria(out[j], c))) { i = j; break; }
+      }
+      if (i < 0) break;
+      usados.add(novo.id);
+      out[i] = novo;
+    }
   }
   return out;
 }
