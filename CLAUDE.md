@@ -47,14 +47,15 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
   hibernar (o robô de lances do LicitaPro roda no mesmo computador).
 - **Atualização sozinha:** o código publicado fica em `zap_codigo` (versao, arquivos[{nome, conteudo, sha256}];
   o atualizador só aceita `robo.js` e `package.json`). O robô confere a cada 30 min entre rodadas e reinicia.
-  Para publicar: insira a versão nova em `zap_codigo` com o sha256 certo. **Versão atual: 13** (robo.js sha 9653ad16…;
+  Para publicar: insira a versão nova em `zap_codigo` com o sha256 certo. **Versão atual: 14** (robo.js sha 49dc86e2…;
+  v14 = **"Ofertas do dia" do Mercado Livre pelo Chrome do desktop** (`lerOfertasML`, ver seção do Mercado Livre abaixo) e o laço antigo produto a produto (`lerListaML`) desligado;
   v13 = a Amazon confere a cada 37 s: com 60 s caía no mesmo instante da rodada (que marca `ocupado` antes) e nunca rodava —
   cuidado ao criar laços novos com o mesmo período dos que já existem;
   v12 = **ofertas da Amazon pelo Chrome do desktop** (`lerAmazon`, ver seção da Amazon abaixo); v11 = só abre a página de cada produto da fila `achados_ml_precos` (mais vendidos pelo /highlights), sem percorrer listas/buscas; fila vazia = espera 20 min; v10 = espera o preço/cards aparecerem antes de ler; v9 = Chrome com janela de verdade, minimizada, por padrão — sem janela o ML devolvia página de erro; com janela as páginas abriram, mas em 25/11 18:37 o ML mostrou tela de verificação e o robô pausou 6 h; `ML_JANELA=nao` volta ao modo sem janela; v8 = volta a estratégia dos mais vendidos por categoria: o servidor
   monta a fila em `achados_ml_precos` pelo `/highlights` e o robô lê o preço na página de cada produto, 2 produtos para cada
   página de lista, uma página a cada 3–6 min; v7 = Mercado Livre pelo Google Chrome, Edge só se não houver Chrome,
   e diagnóstico de página vazia em `ml_preco_msg`; v6 trouxe
-  package.json com `playwright-core`; o atualizador roda `npm install` e volta à anterior se falhar). `robo-whatsapp/robo.js` = v13
+  package.json com `playwright-core`; o atualizador roda `npm install` e volta à anterior se falhar). `robo-whatsapp/robo.js` = v14
   (com fim de linha LF, igual ao publicado; confira o sha256 antes de derivar a próxima versão).
 - Agenda (no servidor): das **6h às 4h** da manhã seguinte, **30 ofertas** a cada 45 min, pausa de 25–70 s.
   Divisão (25/11/2026, pedido do dono): 5 brinquedos + 4 Natal/formatura (até 22/12) + 6 beleza e cosméticos + 6 moda feminina
@@ -98,6 +99,23 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
 ## Mercado Livre pelo navegador (25/11/2026)
 - **PAUSADO pelo dono em 25/11 19:10** até resolver o bloqueio (tela de verificação no Chrome do robô; consulta 498450570 no suporte do ML): `ml_preco_ativo` = false, cron `achados-ml-buscar` desligado, ofertas meli ativas guardadas em `achados_ml_pausa` e marcadas 'descartada' (como voltar: `supabase/migrations/20261125_ml_pausa.sql`).
 - Amazon (25/11): sem API (conta ainda não aprovada; Creators API só com 10 vendas em 30 dias). Ofertas pegas à mão no navegador e gravadas com `amz_asin` + `link` com `amz_tag`, status 'aprovada' (prioridade).
+
+## Mercado Livre "Ofertas do dia" pelo robô do desktop (27/11/2026)
+- Mesmo procedimento das tarefas agendadas do notebook (que continuam valendo; não apagar nem alterar), para seguir com o
+  notebook desligado. O índice único em `(dono, ml_item_id)` evita duplicar entre as duas fontes.
+- Robô v14, `lerOfertasML()` (laço de 41 s; não coincidir com 20, 37 e 60 s): 3 vezes por dia em horários sorteados entre 9h e 22h,
+  3 h ou mais entre uma e outra (agenda do dia em `ml-ofertas-agenda.json` na pasta do robô), 2 páginas de
+  `mercadolivre.com.br/ofertas?page=N` por vez, 40–90 s entre as páginas, rolagem lenta. Nunca junto com a Amazon nem no meio de uma rodada.
+  Lê `.poly-card` (pula patrocinados; ID `/up/MLBU…` → `/p/MLB…` → `MLB-123`, nunca o item_id do pdp_filters; "de"/"por" pelo aria-label).
+- `achados-zap` v28: `ml_ofertas_proxima` (páginas 1–8, rodízio em `achados_config.ml_ofertas_cursor`; só com
+  `ml_desktop_ativo`; com `so_teste` serve 1 página se `ml_desktop_teste` = true e volta o flag para false). `ml_lista`
+  aceita MLBU, mínimo fixo de 15%, categoria "Beleza e Cosméticos" pelas palavras do título ou "Ofertas ML"; oferta já existente
+  só atualiza o preço, e 'descartada' que nunca saiu no WhatsApp (`postado_em` nulo) volta para 'nova'.
+- Liga/desliga: `achados_config.ml_desktop_ativo` (padrão false). Teste: `ml_desktop_teste` = true → o robô lê 1 página em até 5 min.
+  `ml_preco_ativo` e o cron `achados-ml-buscar` continuam desligados.
+- Verificação/captcha (url ou título com verifica|captcha|account-verification|wall|robot): **não contorna**, avisa no WhatsApp
+  particular do dono, para o Mercado Livre por 24 h e anota em `ml_preco_msg`.
+- Migração: `supabase/migrations/20261127_ml_desktop.sql`.
 
 ## Amazon pelo navegador (26/11/2026)
 - Duas fontes gravam na mesma tabela, sem duplicar (índice único `achados_ofertas_dono_amz_asin_key` em `(dono, amz_asin)`):

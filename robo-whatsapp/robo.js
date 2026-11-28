@@ -399,6 +399,97 @@ async function lerListaML() {
   }
 }
 
+// v14 (27/11/2026, pedido do dono): "Ofertas do dia" do Mercado Livre pelo Chrome deste computador, o mesmo
+// procedimento das tarefas do notebook, para continuar com o notebook desligado (o ml_item_id único evita duplicar).
+// 3 vezes por dia, em horários sorteados entre 9h e 22h (3 h ou mais entre uma e outra), 2 páginas por vez,
+// 40–90 s entre as páginas, rolando devagar. Nunca junto com a Amazon nem no meio de uma rodada.
+// Só com achados_config.ml_desktop_ativo. Verificação/captcha: NÃO contorna; avisa e para o Mercado Livre por 24 h.
+const ARQ_ML_AGENDA = path.join(AQUI, "ml-ofertas-agenda.json");
+const ML_BLOQ = /verifica|captcha|account-verification|wall|robot/i;
+let mlTesteEm = 0;
+function agendaML() {
+  const hoje = new Date().toLocaleDateString("pt-BR");
+  let a = null;
+  try { a = JSON.parse(fs.readFileSync(ARQ_ML_AGENDA, "utf8")); } catch {}
+  if (a?.dia === hoje) return a;
+  // 3 horários entre 9h e 22h com 3 h ou mais entre eles: sobra de 13 h − 6 h = 7 h, sorteada em 3 pontos.
+  const sob = [aleat(0, 421), aleat(0, 421), aleat(0, 421)].sort((x, y) => x - y);
+  const min = [540 + sob[0], 540 + 180 + sob[1], 540 + 360 + sob[2]];
+  a = { dia: hoje, horarios: min, feitos: [], ultimaEm: a?.ultimaEm || 0 };
+  fs.writeFileSync(ARQ_ML_AGENDA, JSON.stringify(a));
+  log("Mercado Livre (Ofertas do dia) hoje às", min.map((m) => `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`).join(", ") + ".");
+  return a;
+}
+async function lerOfertasML() {
+  if (mlOcupado || amzOcupado || ocupado || privOcupado || mlDesligado || !pronto || Date.now() < mlPausaAte) return;
+  const agora = new Date(), m = agora.getHours() * 60 + agora.getMinutes();
+  let a, vez, paginas;
+  try { a = agendaML(); } catch (e) { log("Mercado Livre: agenda:", e.message); return; }
+  vez = a.horarios.find((h) => h <= m && !a.feitos.includes(h));
+  const podeAgora = vez !== undefined && m < 22 * 60 && Date.now() - (a.ultimaEm || 0) >= 3 * 3600 * 1000;
+  if (!podeAgora && Date.now() - mlTesteEm < 5 * 60 * 1000) return;
+  mlOcupado = true;
+  let pg;
+  try {
+    if (podeAgora) ({ paginas } = await api({ acao: "ml_ofertas_proxima" }));
+    else { mlTesteEm = Date.now(); ({ paginas } = await api({ acao: "ml_ofertas_proxima", so_teste: true })); if (!paginas?.length) return; log("Mercado Livre: leitura de teste pedida pelo app."); }
+    if (podeAgora) { a.feitos.push(...a.horarios.filter((h) => h <= m)); a.ultimaEm = Date.now(); fs.writeFileSync(ARQ_ML_AGENDA, JSON.stringify(a)); }
+    if (!paginas?.length) { log("Mercado Livre: nada a ler agora (desligado no app)."); return; }
+    pg = await (await navegadorML()).newPage();
+    for (const [k, pag] of paginas.entries()) {
+      if (k > 0) await pg.waitForTimeout(aleat(40, 91) * 1000); // 40–90 s entre as páginas
+      await pg.goto(pag.url, { waitUntil: "domcontentloaded", timeout: 45000 });
+      await pg.waitForTimeout(aleat(3500, 4600));
+      await pg.waitForSelector(".poly-card", { timeout: 20000 }).catch(() => {});
+      const bloq = async () => { const u = pg.url(), t = await pg.title().catch(() => ""); return ML_BLOQ.test(u) || ML_BLOQ.test(t) ? `${t} (${u.slice(0, 80)})` : null; };
+      let bq = await bloq();
+      // Rola a página devagar, como uma pessoa (às vezes volta um pouco).
+      if (!bq) for (let i = 0, n = aleat(8, 14); i < n; i++) {
+        await pg.mouse.wheel(0, Math.random() < 0.15 ? -aleat(150, 350) : aleat(350, 800));
+        await pg.waitForTimeout(aleat(700, 1900));
+      }
+      bq = bq || (await bloq());
+      if (bq) {
+        mlPausaAte = Date.now() + 24 * 3600 * 1000;
+        log("Mercado Livre pediu verificação (", bq, "). Parando o Mercado Livre por 24 horas.");
+        await api({ acao: "ml_preco", bloqueio: true, horas: 24, erro: `Ofertas do dia (desktop): o Mercado Livre mostrou uma tela de verificação: "${bq}".` }).catch(() => {});
+        return;
+      }
+      const itens = await pg.evaluate(() => {
+        const reais = (t) => {
+          const m = String(t || "").match(/([\d.]+)\s*rea(?:is|les)(?:\s*c[oa]n?\s*(\d+)\s*centavos?)?/i);
+          return m ? Number(m[1].replace(/\./g, "")) + (m[2] ? Number(m[2]) / 100 : 0) : null;
+        };
+        const out = [];
+        for (const c of document.querySelectorAll(".poly-card")) {
+          if (c.querySelector(".poly-component__ads-promotions, .poly-component__ad-label")) continue; // patrocinado
+          const a = c.querySelector("a.poly-component__title") || c.querySelector("a");
+          const link = String(a?.href || "").split("#")[0].split("?")[0];
+          if (!/^https:\/\/(www|produto)\.mercadolivre\.com\.br\//.test(link)) continue;
+          // ID: /up/MLBU… → /p/MLB… → MLB-123 (o item_id do pdp_filters às vezes vem errado; não usar)
+          const id = (link.match(/\/up\/(MLBU\d+)/) || [])[1] || (link.match(/\/p\/(MLB\d+)/) || [])[1]
+            || ((link.match(/MLB-(\d+)/) || [])[1] ? "MLB" + link.match(/MLB-(\d+)/)[1] : null);
+          if (!id) continue;
+          const prev = c.querySelector(".andes-money-amount--previous");
+          const cur = [...c.querySelectorAll(".andes-money-amount")].find((e) => !e.classList.contains("andes-money-amount--previous") && !e.closest(".andes-money-amount--previous"));
+          const img = c.querySelector("img");
+          const foto = img?.src && /^https:/.test(img.src) ? img.src : img?.getAttribute("data-src") || "";
+          out.push({ id, titulo: (c.querySelector(".poly-component__title")?.textContent || a.textContent || "").trim(), link,
+            imagem: /^https:/.test(foto) ? foto : null, de: reais(prev?.getAttribute("aria-label")), por: reais(cur?.getAttribute("aria-label")) });
+        }
+        return out;
+      });
+      const r = await api({ acao: "ml_lista", rotulo: `desktop · ${pag.rotulo}`, itens });
+      log(`Mercado Livre · ${pag.rotulo}: ${itens.length} cards, ${r.com_desconto ?? 0} com 15%+, ${r.novos ?? 0} novos, ${r.atualizados ?? 0} atualizados.`);
+    }
+  } catch (e) {
+    log("Mercado Livre: erro ao ler as Ofertas do dia:", String(e.message || e).slice(0, 160));
+  } finally {
+    await pg?.close().catch(() => {});
+    mlOcupado = false;
+  }
+}
+
 // v12 (26/11/2026, pedido do dono): ofertas da Amazon pelo Chrome deste computador, para a busca continuar com o
 // notebook desligado (as tarefas do notebook continuam; o amz_asin único no servidor evita duplicar).
 // Abre amazon.com.br/deals (ou a página que o servidor mandar), rola aos poucos lendo os cards (a lista é virtual)
@@ -493,4 +584,6 @@ async function verAtualizacao() {
 
 log(`Robô versão ${VERSAO}.`);
 await conectar();
-if (modo === "ligado") { setInterval(() => rodar(false), 60 * 1000); setInterval(mandarPrivadas, 20 * 1000); setInterval(lerListaML, 30 * 1000); setInterval(lerAmazon, 37 * 1000); setInterval(verAtualizacao, 30 * 60 * 1000); }
+// v14: o laço antigo do Mercado Livre produto a produto (lerListaML / ml_precos_pendentes) foi desligado; ficou lerOfertasML.
+// 41 s não coincide com os outros laços (20, 37 e 60 s), ver nota da v13.
+if (modo === "ligado") { setInterval(() => rodar(false), 60 * 1000); setInterval(mandarPrivadas, 20 * 1000); setInterval(lerOfertasML, 41 * 1000); setInterval(lerAmazon, 37 * 1000); setInterval(verAtualizacao, 30 * 60 * 1000); }
