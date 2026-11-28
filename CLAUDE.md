@@ -100,6 +100,11 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
 - **PAUSADO pelo dono em 25/11 19:10** até resolver o bloqueio (tela de verificação no Chrome do robô; consulta 498450570 no suporte do ML): `ml_preco_ativo` = false, cron `achados-ml-buscar` desligado, ofertas meli ativas guardadas em `achados_ml_pausa` e marcadas 'descartada' (como voltar: `supabase/migrations/20261125_ml_pausa.sql`).
 - Amazon (25/11): sem API (conta ainda não aprovada; Creators API só com 10 vendas em 30 dias). Ofertas pegas à mão no navegador e gravadas com `amz_asin` + `link` com `amz_tag`, status 'aprovada' (prioridade).
 
+## Link curto do Mercado Livre (28/11/2026)
+- `achados_aplicar_afiliado` monta o `link` com `achados_ml_link_curto(link_produto)`: tira o nome do produto do endereço
+  (`/<nome>/p/MLB…` → `/p/MLB…`, `/<nome>/up/MLBU…` → `/up/MLBU…`, `MLB-123-<nome>-_JM` → `MLB-123-_JM`). Conferido no Chrome do
+  dono: abre o mesmo anúncio e mantém os parâmetros de afiliado. `link_produto` fica como veio. Migração `20261128_ml_link_curto.sql`.
+
 ## Mercado Livre "Ofertas do dia" pelo robô do desktop (27/11/2026)
 - **DESLIGADO — decisão do dono em 28/11/2026: Mercado Livre só nas tarefas do notebook.** No 1º teste (28/11 9h42), mesmo
   logado, o Mercado Livre mandou para `account-verification`. Motivo provável: o Chrome do robô é automatizado (Playwright,
