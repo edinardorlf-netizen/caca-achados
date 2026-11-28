@@ -101,6 +101,11 @@ Idioma: português do Brasil. Respostas ao dono: curtas, dizendo o que ficou pro
 - Amazon (25/11): sem API (conta ainda não aprovada; Creators API só com 10 vendas em 30 dias). Ofertas pegas à mão no navegador e gravadas com `amz_asin` + `link` com `amz_tag`, status 'aprovada' (prioridade).
 
 ## Mercado Livre "Ofertas do dia" pelo robô do desktop (27/11/2026)
+- **DESLIGADO — decisão do dono em 28/11/2026: Mercado Livre só nas tarefas do notebook.** No 1º teste (28/11 9h42), mesmo
+  logado, o Mercado Livre mandou para `account-verification`. Motivo provável: o Chrome do robô é automatizado (Playwright,
+  aviso "controlado por software de teste automatizado", `navigator.webdriver`) e o perfil/computador já tinham sido marcados em 25/11.
+  O notebook usa o Chrome normal do dono (extensão do Claude). Não religar `ml_desktop_ativo` nem tentar esconder a automação.
+  O código (v14/v28) ficou pronto, sem uso.
 - Mesmo procedimento das tarefas agendadas do notebook (que continuam valendo; não apagar nem alterar), para seguir com o
   notebook desligado. O índice único em `(dono, ml_item_id)` evita duplicar entre as duas fontes.
 - Robô v14, `lerOfertasML()` (laço de 41 s; não coincidir com 20, 37 e 60 s): 3 vezes por dia em horários sorteados entre 9h e 22h,
